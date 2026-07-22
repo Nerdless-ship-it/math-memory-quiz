@@ -1,0 +1,5 @@
+node_modules/
+qa-output/
+*.log
+.DS_Store
+Thumbs.db

@@ -1,0 +1,12 @@
+{
+  "name": "math-memory-quiz",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test test/*.test.mjs",
+    "test:browser": "node test/browser-smoke.mjs",
+    "test:powers-browser": "node test/powers-browser-smoke.mjs"
+  }
+}

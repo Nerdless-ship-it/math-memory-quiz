@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#17231f" />
+    <meta name="description" content="选择百分数与分数，或平方与幂次专项速算测试。" />
+    <title>速算训练</title>
+    <link rel="icon" href="./home-favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./home.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="速算训练首页">
+        <span class="brand-mark home-mark" aria-hidden="true">Σ</span>
+        <span>速算训练</span>
+      </a>
+    </header>
+
+    <main>
+      <section class="screen selection-screen" aria-labelledby="selection-title">
+        <div class="selection-heading">
+          <h1 id="selection-title">选择今天的测试</h1>
+          <p>每次完整练习都会覆盖全部题目，交卷后统一查看成绩与错题。</p>
+        </div>
+
+        <div class="test-choices">
+          <a class="test-choice percent-choice" id="percent-choice" href="./percent.html">
+            <div class="choice-meta">
+              <span>01</span>
+              <span>30 题</span>
+            </div>
+            <div class="choice-math" aria-hidden="true">
+              <span>12.5%</span><span>↔</span><span class="mini-fraction"><i>1</i><i>8</i></span>
+            </div>
+            <div class="choice-footer">
+              <div>
+                <h2>百分数与分数</h2>
+                <p>双向换算</p>
+              </div>
+              <span class="choice-action">
+                开始测试
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
+              </span>
+            </div>
+          </a>
+
+          <a class="test-choice powers-choice" id="powers-choice" href="./powers.html">
+            <div class="choice-meta">
+              <span>02</span>
+              <span>24 题</span>
+            </div>
+            <div class="choice-math" aria-hidden="true">
+              <span>17<sup>2</sup></span><span>↔</span><span>289</span>
+            </div>
+            <div class="choice-footer">
+              <div>
+                <h2>平方与幂次</h2>
+                <p>平方 · 立方 · 四次幂</p>
+              </div>
+              <span class="choice-action">
+                开始测试
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
+              </span>
+            </div>
+          </a>
+        </div>
+      </section>
+
+      <section class="history-section" aria-labelledby="history-title">
+        <div class="history-inner">
+          <div class="history-heading">
+            <div>
+              <p class="history-label">测试记录</p>
+              <h2 id="history-title">历史成绩</h2>
+            </div>
+            <div class="history-tabs" role="tablist" aria-label="选择测试类型">
+              <button id="history-percent-tab" type="button" role="tab" aria-selected="true" data-history-type="percent">百分数与分数</button>
+              <button id="history-powers-tab" type="button" role="tab" aria-selected="false" data-history-type="powers">平方与幂次</button>
+            </div>
+          </div>
+
+          <div class="history-summary" aria-label="历史统计">
+            <div><span>完成次数</span><strong id="history-count">0</strong></div>
+            <div><span>最佳正确率</span><strong id="history-best">—</strong></div>
+            <div><span>最快用时</span><strong id="history-fastest">—</strong></div>
+          </div>
+
+          <div class="history-list" id="history-list"></div>
+          <div class="history-empty" id="history-empty">
+            <strong>还没有测试记录</strong>
+            <span>完成一次测试后，成绩会自动保存在这里。</span>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="./js/home.js"></script>
+  </body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "name": "math-memory-quiz",
+  "compatibility_date": "2026-07-22",
+  "workers_dev": true,
+  "assets": {
+    "directory": "./public",
+    "not_found_handling": "none",
+    "html_handling": "auto-trailing-slash"
+  }
+}

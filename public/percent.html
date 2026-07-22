@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#126b52" />
+    <meta name="description" content="30 道百分数与分数互换练习，自动计时并在交卷后订正错题。" />
+    <title>百分快练</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="./index.html" aria-label="返回测试选择页">
+        <span class="brand-mark" aria-hidden="true">%</span>
+        <span>百分快练</span>
+      </a>
+      <div class="topbar-actions">
+        <a class="home-link" href="./index.html" aria-label="返回测试选择页">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+          <span>返回选择</span>
+        </a>
+        <div class="test-meta" id="test-meta" hidden>
+          <span><span class="meta-label">进度</span><strong id="header-progress">1 / 30</strong></span>
+          <span class="meta-divider" aria-hidden="true"></span>
+          <span><span class="meta-label">用时</span><strong id="header-time">00:00</strong></span>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="screen welcome-screen" id="welcome-screen" aria-labelledby="welcome-title">
+        <div class="welcome-copy">
+          <p class="section-index">30 组常用换算</p>
+          <h1 id="welcome-title">百分数与分数<br />互换测试</h1>
+          <p class="welcome-description">每组只出现一次，题目顺序与换算方向都会随机。完成后统一查看成绩与错题订正。</p>
+          <button class="primary-button" id="start-button" type="button">
+            开始测试
+            <span aria-hidden="true">→</span>
+          </button>
+        </div>
+
+        <div class="sample-sheet" aria-label="换算示例">
+          <div class="sheet-header">
+            <span>换算示例</span>
+            <span>01</span>
+          </div>
+          <div class="sample-equation">
+            <span>12.5%</span>
+            <span class="equals">=</span>
+            <span class="fraction" aria-label="八分之一"><span>1</span><span>8</span></span>
+          </div>
+          <div class="sheet-rule"></div>
+          <div class="sheet-notes">
+            <span>随机双向出题</span>
+            <span>完成后统一订正</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen quiz-screen" id="quiz-screen" aria-labelledby="question-instruction" hidden>
+        <div class="quiz-layout">
+          <aside class="quiz-sidebar" aria-label="测试信息">
+            <span class="question-number" id="question-number">01</span>
+            <div>
+              <p class="sidebar-label">本题要求</p>
+              <p class="sidebar-value" id="direction-label">百分数转分数</p>
+            </div>
+            <div class="sidebar-rule"></div>
+            <p class="sidebar-tip">输入答案后按回车，可直接进入下一题。</p>
+          </aside>
+
+          <div class="question-area">
+            <div class="progress-track" aria-hidden="true"><span id="progress-fill"></span></div>
+            <p class="question-instruction" id="question-instruction">写出对应的分数</p>
+            <div class="equation" id="equation">
+              <span class="prompt-value" id="prompt-value">12.5%</span>
+              <span class="equation-equals">=</span>
+              <label class="answer-wrap" for="answer-input">
+                <span class="sr-only" id="answer-label">请输入对应分数</span>
+                <input id="answer-input" aria-labelledby="answer-label" autocomplete="off" inputmode="decimal" spellcheck="false" />
+                <span class="answer-suffix" id="answer-suffix" aria-hidden="true"></span>
+              </label>
+            </div>
+            <p class="input-hint" id="input-hint">请按表格格式填写，例如 1/8</p>
+
+            <div class="question-actions">
+              <button class="secondary-button" id="previous-button" type="button">上一题</button>
+              <button class="primary-button compact" id="next-button" type="button" disabled>
+                <span id="next-button-text">下一题</span>
+                <span aria-hidden="true">→</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen result-screen" id="result-screen" aria-labelledby="result-title" hidden>
+        <div class="result-hero">
+          <div class="result-score-block">
+            <p class="section-index">测试完成</p>
+            <div class="score-line"><strong id="score-value">0</strong><span>分</span></div>
+            <h1 id="result-title">本次成绩</h1>
+          </div>
+          <div class="result-stats" aria-label="测试统计">
+            <div><span>正确率</span><strong id="accuracy-value">0%</strong></div>
+            <div><span>答对</span><strong id="correct-value">0 / 30</strong></div>
+            <div><span>总用时</span><strong id="duration-value">00:00</strong></div>
+          </div>
+        </div>
+
+        <div class="result-comparison" id="result-comparison">
+          <span id="comparison-label">首次记录</span>
+          <strong id="accuracy-comparison">本次成绩已保存</strong>
+          <strong id="time-comparison"></strong>
+        </div>
+
+        <div class="correction-section">
+          <div class="correction-heading">
+            <div>
+              <p class="section-index">订正</p>
+              <h2 id="correction-title">错题回顾</h2>
+            </div>
+            <button class="secondary-button" id="restart-button" type="button">再测一次</button>
+          </div>
+          <div class="correction-list" id="correction-list"></div>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./js/app.js"></script>
+  </body>
+</html>

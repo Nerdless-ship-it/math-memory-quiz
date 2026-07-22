@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#2457a6" />
+    <meta name="description" content="24 道平方数、立方数与四次幂双向记忆测试，自动计时并订正错题。" />
+    <title>平方幂次速记</title>
+    <link rel="icon" href="./powers-favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./powers.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="./index.html" aria-label="返回测试选择页">
+        <span class="brand-mark power-mark" aria-hidden="true">x²</span>
+        <span>平方幂次</span>
+      </a>
+      <div class="topbar-actions">
+        <a class="home-link" href="./index.html" aria-label="返回测试选择页">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+          <span>返回选择</span>
+        </a>
+        <div class="test-meta" id="test-meta" hidden>
+          <span><span class="meta-label">进度</span><strong id="header-progress">1 / 24</strong></span>
+          <span class="meta-divider" aria-hidden="true"></span>
+          <span><span class="meta-label">用时</span><strong id="header-time">00:00</strong></span>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="screen welcome-screen" id="welcome-screen" aria-labelledby="welcome-title">
+        <div class="welcome-copy">
+          <p class="section-index">24 组常用幂值</p>
+          <h1 id="welcome-title">平方与幂次<br />速记测试</h1>
+          <p class="welcome-description">平方数、立方数和四次幂混合出题。每组只出现一次，常数与幂值双向随机测试。</p>
+          <button class="primary-button" id="start-button" type="button">开始测试</button>
+        </div>
+
+        <div class="power-board" aria-label="平方与幂次示例">
+          <div class="board-header"><span>常用幂值</span><span>24 组</span></div>
+          <div class="board-row featured">
+            <span class="board-topic">平方</span>
+            <strong>17<sup>2</sup></strong><span class="board-operator">=</span><strong>289</strong>
+          </div>
+          <div class="board-row">
+            <span class="board-topic">立方</span>
+            <strong>1.3<sup>3</sup></strong><span class="board-operator">≈</span><strong>2.2</strong>
+          </div>
+          <div class="board-row">
+            <span class="board-topic">四次幂</span>
+            <strong>1.4<sup>4</sup></strong><span class="board-operator">≈</span><strong>3.8</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen quiz-screen" id="quiz-screen" aria-labelledby="question-instruction" hidden>
+        <div class="quiz-layout">
+          <aside class="quiz-sidebar" aria-label="测试信息">
+            <span class="question-number" id="question-number">01</span>
+            <div>
+              <p class="sidebar-label">本题类型</p>
+              <p class="sidebar-value" id="topic-label">平方数</p>
+              <p class="sidebar-direction" id="direction-label">由常数求幂值</p>
+            </div>
+            <div class="sidebar-rule"></div>
+            <p class="sidebar-tip">小数幂按图片中的近似值作答，也可填写精确值。</p>
+          </aside>
+
+          <div class="question-area">
+            <div class="progress-track" aria-hidden="true"><span id="progress-fill"></span></div>
+            <p class="question-instruction" id="question-instruction">写出这个常数的平方数</p>
+            <div class="equation power-equation">
+              <span class="prompt-value" id="prompt-value">17²</span>
+              <span class="equation-equals" id="equation-operator">=</span>
+              <label class="answer-wrap" for="answer-input">
+                <span class="sr-only" id="answer-label">请输入答案</span>
+                <input id="answer-input" aria-labelledby="answer-label" autocomplete="off" inputmode="decimal" spellcheck="false" />
+                <span class="power-answer-suffix" id="answer-suffix" aria-hidden="true"></span>
+              </label>
+            </div>
+            <p class="input-hint" id="input-hint">只需填写数字</p>
+
+            <div class="question-actions">
+              <button class="secondary-button" id="previous-button" type="button">上一题</button>
+              <button class="primary-button compact" id="next-button" type="button" disabled>
+                <span id="next-button-text">下一题</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen result-screen" id="result-screen" aria-labelledby="result-title" hidden>
+        <div class="result-hero">
+          <div class="result-score-block">
+            <p class="section-index">测试完成</p>
+            <div class="score-line"><strong id="score-value">0</strong><span>分</span></div>
+            <h1 id="result-title">本次成绩</h1>
+          </div>
+          <div class="result-stats" aria-label="测试统计">
+            <div><span>正确率</span><strong id="accuracy-value">0%</strong></div>
+            <div><span>答对</span><strong id="correct-value">0 / 24</strong></div>
+            <div><span>总用时</span><strong id="duration-value">00:00</strong></div>
+          </div>
+        </div>
+
+        <div class="result-comparison" id="result-comparison">
+          <span id="comparison-label">首次记录</span>
+          <strong id="accuracy-comparison">本次成绩已保存</strong>
+          <strong id="time-comparison"></strong>
+        </div>
+
+        <div class="correction-section">
+          <div class="correction-heading">
+            <div>
+              <p class="section-index">订正</p>
+              <h2 id="correction-title">错题回顾</h2>
+            </div>
+            <button class="secondary-button" id="restart-button" type="button">再测一次</button>
+          </div>
+          <div class="correction-list" id="correction-list"></div>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./js/powers-app.js"></script>
+  </body>
+</html>
