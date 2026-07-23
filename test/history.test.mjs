@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { compareRecords, historyForType, readHistory, saveTestResult } from '../public/js/history.js';
+import { compareRecords, historyForType, mistakesForType, readHistory, removeMistake, saveMistakes, saveTestResult } from '../public/js/history.js';
 
 function createStorage(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -35,4 +35,17 @@ test('损坏或不合法的本地记录会被安全忽略', () => {
     'math-memory-quiz-history:v1': JSON.stringify([{ id: 'x', quizType: 'other', completedAt: 1 }])
   });
   assert.deepEqual(readHistory(invalid), []);
+});
+
+test('错题集会按题型去重累积，并支持移除', () => {
+  const storage = createStorage();
+  saveMistakes('percent', [{ id: 'percent:forward:12.5', question: '12.5% = ?', answer: '1/8' }], storage);
+  saveMistakes('percent', [{ id: 'percent:forward:12.5', question: '12.5% = ?', answer: '1/8' }], storage);
+  saveMistakes('powers', [{ id: 'powers:base:square-17', question: '17² = ?', answer: '289' }], storage);
+  const percentMistakes = mistakesForType('percent', storage);
+  assert.equal(percentMistakes.length, 1);
+  assert.equal(percentMistakes[0].wrongCount, 2);
+  assert.equal(mistakesForType('powers', storage).length, 1);
+  assert.equal(removeMistake('percent:forward:12.5', storage).length, 1);
+  assert.equal(mistakesForType('percent', storage).length, 0);
 });

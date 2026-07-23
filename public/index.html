@@ -94,6 +94,30 @@
           </div>
         </div>
       </section>
+
+      <section class="mistakes-section" aria-labelledby="mistakes-title">
+        <div class="mistakes-inner">
+          <div class="mistakes-heading">
+            <div>
+              <p class="history-label">复习</p>
+              <h2 id="mistakes-title">错题集</h2>
+            </div>
+            <div class="history-tabs" role="tablist" aria-label="选择错题类型">
+              <button id="mistakes-percent-tab" type="button" role="tab" aria-selected="true" data-mistake-type="percent">百分数与分数</button>
+              <button id="mistakes-powers-tab" type="button" role="tab" aria-selected="false" data-mistake-type="powers">平方与幂次</button>
+            </div>
+          </div>
+
+          <div class="mistakes-summary" aria-label="错题统计">
+            <span>待复习</span><strong id="mistakes-count">0</strong><span>题</span>
+          </div>
+          <div class="mistakes-list" id="mistakes-list"></div>
+          <div class="mistakes-empty" id="mistakes-empty">
+            <strong>还没有错题</strong>
+            <span>交卷后，答错的题目会自动收集到这里。</span>
+          </div>
+        </div>
+      </section>
     </main>
     <script type="module" src="./js/home.js"></script>
   </body>

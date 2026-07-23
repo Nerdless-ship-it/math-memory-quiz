@@ -158,6 +158,8 @@ try {
 
   const byPercent = new Map(PAIRS.map((pair) => [pair.percent, pair.fraction]));
   const byFraction = new Map(PAIRS.map((pair) => [pair.fraction, pair.percent]));
+  let firstCorrectAnswer = '';
+  let capturedFractionQuestion = false;
 
   for (let index = 0; index < PAIRS.length; index += 1) {
     const state = JSON.parse(await evaluate(`JSON.stringify({
@@ -168,7 +170,21 @@ try {
       ? byPercent.get(state.prompt.replace('%', ''))
       : byFraction.get(state.prompt);
     assert(expected, `Could not resolve answer for ${state.prompt}`);
-    const answer = index === 0 ? '0' : expected;
+    if (index === 0) firstCorrectAnswer = state.direction === '百分数转分数' ? expected : `${expected}%`;
+    if (state.direction === '百分数转分数') {
+      const fractionInput = JSON.parse(await evaluate(`JSON.stringify({
+        numerator: document.querySelector('#fraction-numerator').textContent,
+        numeratorHidden: document.querySelector('#fraction-numerator').hidden,
+        inputValue: document.querySelector('#answer-input').value
+      })`));
+      assert(fractionInput.numerator === '1/' && !fractionInput.numeratorHidden, 'Fraction questions should show a fixed 1/ prefix');
+      assert(fractionInput.inputValue === '', 'Fraction denominator input should start empty');
+      if (!capturedFractionQuestion) {
+        await screenshot('percent-quiz-fraction-question-mobile.png');
+        capturedFractionQuestion = true;
+      }
+    }
+    const answer = index === 0 ? '0' : state.direction === '百分数转分数' ? expected.slice(2) : expected;
     await evaluate(`(() => {
       const input = document.querySelector('#answer-input');
       input.value = ${JSON.stringify(answer)};
@@ -195,6 +211,13 @@ try {
   assert(result.savedRecords === 2, `Expected two saved percent records, received ${result.savedRecords}`);
   assert(consoleErrors.length === 0, `Browser errors: ${consoleErrors.join('; ')}`);
   await screenshot('percent-quiz-result-desktop.png');
+  await evaluate("document.querySelector('.home-link').click()");
+  await waitFor("document.title === '速算训练' && document.querySelector('#mistakes-count')?.textContent === '1'", 'Wrong answer was not saved to the mistake book');
+  assert(await evaluate(`document.querySelector('#mistakes-list .mistake-answer')?.textContent === ${JSON.stringify(`答案：${firstCorrectAnswer}`)}`), 'Mistake book should show the correct answer');
+  await evaluate("document.querySelector('#mistakes-title').scrollIntoView()");
+  await screenshot('math-quiz-mistakes-desktop.png');
+  await evaluate("document.querySelector('#mistakes-list .mistake-remove').click()");
+  await waitFor("document.querySelector('#mistakes-count')?.textContent === '0'", 'Mistake book item was not removed');
   await setViewport(390, 844, true);
   assert(await evaluate('document.documentElement.scrollWidth <= window.innerWidth'), 'Mobile result screen overflows horizontally');
   await screenshot('percent-quiz-result-mobile.png');

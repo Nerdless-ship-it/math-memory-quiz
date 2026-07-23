@@ -1,6 +1,6 @@
 import { PAIRS } from './data.js';
-import { compareRecords, saveTestResult } from './history.js';
-import { createQuiz, formatDuration, isCorrect } from './quiz.js';
+import { compareRecords, saveMistakes, saveTestResult } from './history.js';
+import { createQuiz, denominatorFromFraction, formatDuration, fractionFromDenominator, isCorrect } from './quiz.js';
 
 const elements = {
   welcome: document.querySelector('#welcome-screen'),
@@ -13,6 +13,8 @@ const elements = {
   nextButton: document.querySelector('#next-button'),
   nextButtonText: document.querySelector('#next-button-text'),
   answerInput: document.querySelector('#answer-input'),
+  answerWrap: document.querySelector('.answer-wrap'),
+  fractionNumerator: document.querySelector('#fraction-numerator'),
   answerSuffix: document.querySelector('#answer-suffix'),
   answerLabel: document.querySelector('#answer-label'),
   inputHint: document.querySelector('#input-hint'),
@@ -75,12 +77,14 @@ function renderQuestion() {
   elements.directionLabel.textContent = toFraction ? '百分数转分数' : '分数转百分数';
   elements.questionInstruction.textContent = toFraction ? '写出对应的分数' : '写出对应的百分数';
   elements.promptValue.textContent = toFraction ? `${question.percent}%` : question.fraction;
-  elements.answerInput.value = question.answer;
-  elements.answerInput.placeholder = toFraction ? '1/…' : '0';
-  elements.answerInput.inputMode = toFraction ? 'text' : 'decimal';
+  elements.answerWrap.classList.toggle('fraction-answer', toFraction);
+  elements.fractionNumerator.hidden = !toFraction;
+  elements.answerInput.value = toFraction ? denominatorFromFraction(question.answer) : question.answer;
+  elements.answerInput.placeholder = toFraction ? '…' : '0';
+  elements.answerInput.inputMode = 'decimal';
   elements.answerSuffix.textContent = toFraction ? '' : '%';
-  elements.answerLabel.textContent = toFraction ? '请输入对应分数' : '请输入对应百分数';
-  elements.inputHint.textContent = toFraction ? '请按表格格式填写，例如 1/8' : '只需填写数字，百分号可省略';
+  elements.answerLabel.textContent = toFraction ? '请输入对应分数的分母' : '请输入对应百分数';
+  elements.inputHint.textContent = toFraction ? '只填写分母' : '只需填写数字，百分号可省略';
   elements.previousButton.disabled = currentIndex === 0;
   elements.nextButton.disabled = question.answer.trim() === '';
   elements.nextButtonText.textContent = position === questions.length ? '交卷' : '下一题';
@@ -89,7 +93,10 @@ function renderQuestion() {
 }
 
 function saveCurrentAnswer() {
-  questions[currentIndex].answer = elements.answerInput.value.trim();
+  const question = questions[currentIndex];
+  question.answer = question.direction === 'percent-to-fraction'
+    ? fractionFromDenominator(elements.answerInput.value)
+    : elements.answerInput.value.trim();
   elements.nextButton.disabled = questions[currentIndex].answer === '';
 }
 
@@ -131,6 +138,14 @@ function finishQuiz() {
     total: results.length,
     durationMs: elapsed
   });
+  saveMistakes('percent', mistakes.map((question) => {
+    const toFraction = question.direction === 'percent-to-fraction';
+    return {
+      id: `percent:${question.direction}:${question.percent}`,
+      question: toFraction ? `${question.percent}% = ?` : `${question.fraction} = ?%`,
+      answer: toFraction ? question.fraction : `${question.percent}%`
+    };
+  }));
   renderComparison(saved.record, saved.previous);
   renderCorrections(mistakes);
   switchScreen(elements.result);

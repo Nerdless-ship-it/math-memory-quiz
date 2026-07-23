@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PAIRS } from '../public/js/data.js';
-import { createQuiz, formatDuration, isCorrect, normalizeFraction, normalizePercent } from '../public/js/quiz.js';
+import { createQuiz, denominatorFromFraction, formatDuration, fractionFromDenominator, isCorrect, normalizeFraction, normalizePercent } from '../public/js/quiz.js';
 
 test('题库包含图片中的 30 对且没有重复', () => {
   assert.equal(PAIRS.length, 30);
@@ -23,6 +23,13 @@ test('答案兼容全角符号、除号、空格和百分号', () => {
   assert.equal(normalizePercent(' 16．7％ '), '16.7');
   assert.equal(isCorrect({ direction: 'percent-to-fraction', answer: '1 ÷ 19', fraction: '1/19' }), true);
   assert.equal(isCorrect({ direction: 'fraction-to-percent', answer: '5.3%', percent: '5.3' }), true);
+});
+
+test('分数题只填写分母时会按分子 1 判题', () => {
+  assert.equal(denominatorFromFraction('1／6。25'), '6.25');
+  assert.equal(fractionFromDenominator(' 8 '), '1/8');
+  assert.equal(fractionFromDenominator('1/19'), '1/19');
+  assert.equal(isCorrect({ direction: 'percent-to-fraction', answer: '19', fraction: '1/19' }), true);
 });
 
 test('错误答案不会误判为正确', () => {

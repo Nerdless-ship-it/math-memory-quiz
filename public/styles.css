@@ -330,6 +330,24 @@ main { min-height: calc(100vh - 76px); }
 
 .answer-wrap input::placeholder { color: #c2cac6; }
 .answer-suffix { font-family: Georgia, serif; font-size: clamp(38px, 5vw, 60px); }
+.fraction-numerator { display: none; }
+.answer-wrap.fraction-answer {
+  height: 94px;
+  gap: 10px;
+  padding: 0 22px;
+}
+.answer-wrap.fraction-answer .fraction-numerator {
+  display: block;
+  flex: 0 0 auto;
+  font-family: Georgia, serif;
+  font-size: clamp(38px, 5vw, 60px);
+  line-height: 1;
+  white-space: nowrap;
+}
+.answer-wrap.fraction-answer input {
+  padding: 0;
+  text-align: left;
+}
 .input-hint { margin: 14px 0 0; color: var(--muted); font-size: 12px; }
 
 .question-actions {
@@ -455,6 +473,8 @@ main { min-height: calc(100vh - 76px); }
   .answer-wrap { height: 76px; padding: 0 12px; }
   .answer-wrap input,
   .answer-suffix { font-size: clamp(32px, 9vw, 46px); }
+  .answer-wrap.fraction-answer { height: 76px; gap: 8px; padding: 0 12px; }
+  .answer-wrap.fraction-answer .fraction-numerator { font-size: clamp(32px, 9vw, 46px); }
   .question-actions { margin-top: 58px; }
   .question-actions button { min-width: 0; flex: 1; padding: 0 14px; gap: 14px; }
 

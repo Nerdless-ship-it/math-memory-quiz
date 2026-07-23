@@ -1,4 +1,5 @@
 const STORAGE_KEY = 'math-memory-quiz-history:v1';
+const MISTAKES_STORAGE_KEY = 'math-memory-quiz-mistakes:v1';
 const QUIZ_TYPES = new Set(['percent', 'powers']);
 
 function getStorage(storage) {
@@ -34,6 +35,22 @@ function normalizeRecord(record) {
   return normalized;
 }
 
+function normalizeMistake(mistake) {
+  if (!mistake || !QUIZ_TYPES.has(mistake.quizType)) return null;
+  const normalized = {
+    id: String(mistake.id ?? ''),
+    quizType: mistake.quizType,
+    question: String(mistake.question ?? ''),
+    answer: String(mistake.answer ?? ''),
+    wrongCount: Number(mistake.wrongCount),
+    lastWrongAt: Number(mistake.lastWrongAt)
+  };
+  if (!normalized.id || !normalized.question || !normalized.answer) return null;
+  if (!Number.isInteger(normalized.wrongCount) || normalized.wrongCount < 1) return null;
+  if (!Number.isFinite(normalized.lastWrongAt)) return null;
+  return normalized;
+}
+
 export function readHistory(storage) {
   const target = getStorage(storage);
   if (!target) return [];
@@ -48,6 +65,62 @@ export function readHistory(storage) {
 
 export function historyForType(quizType, storage) {
   return readHistory(storage).filter((record) => record.quizType === quizType);
+}
+
+export function readMistakes(storage) {
+  const target = getStorage(storage);
+  if (!target) return [];
+  try {
+    const parsed = JSON.parse(target.getItem(MISTAKES_STORAGE_KEY) ?? '[]');
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map(normalizeMistake).filter(Boolean).sort((left, right) => left.lastWrongAt - right.lastWrongAt);
+  } catch {
+    return [];
+  }
+}
+
+export function mistakesForType(quizType, storage) {
+  return readMistakes(storage).filter((mistake) => mistake.quizType === quizType);
+}
+
+export function saveMistakes(quizType, mistakes, storage) {
+  if (!QUIZ_TYPES.has(quizType)) throw new Error(`Unsupported quiz type: ${quizType}`);
+  const target = getStorage(storage);
+  const existing = readMistakes(target);
+  const byId = new Map(existing.map((mistake) => [mistake.id, mistake]));
+  const now = Date.now();
+
+  for (const mistake of mistakes) {
+    const current = normalizeMistake({ ...mistake, quizType, wrongCount: 1, lastWrongAt: now });
+    if (!current) continue;
+    const previous = byId.get(current.id);
+    byId.set(current.id, previous
+      ? { ...current, wrongCount: previous.wrongCount + 1, lastWrongAt: now }
+      : current);
+  }
+
+  const saved = [...byId.values()].sort((left, right) => left.lastWrongAt - right.lastWrongAt);
+  if (target) {
+    try {
+      target.setItem(MISTAKES_STORAGE_KEY, JSON.stringify(saved));
+    } catch {
+      // The test result remains available when local storage is unavailable or full.
+    }
+  }
+  return saved;
+}
+
+export function removeMistake(id, storage) {
+  const target = getStorage(storage);
+  const next = readMistakes(target).filter((mistake) => mistake.id !== id);
+  if (target) {
+    try {
+      target.setItem(MISTAKES_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // The UI can still render the current in-memory state after a storage failure.
+    }
+  }
+  return next;
 }
 
 export function saveTestResult(quizType, metrics, storage) {

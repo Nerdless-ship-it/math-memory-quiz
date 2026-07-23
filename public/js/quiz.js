@@ -37,9 +37,19 @@ export function normalizePercent(value) {
     .replace(/[。．]/g, '.');
 }
 
+export function denominatorFromFraction(value) {
+  const normalized = normalizeFraction(value);
+  return normalized.startsWith('1/') ? normalized.slice(2) : normalized;
+}
+
+export function fractionFromDenominator(value) {
+  const denominator = denominatorFromFraction(value);
+  return denominator ? `1/${denominator}` : '';
+}
+
 export function isCorrect(question) {
   if (question.direction === 'percent-to-fraction') {
-    return normalizeFraction(question.answer) === normalizeFraction(question.fraction);
+    return normalizeFraction(fractionFromDenominator(question.answer)) === normalizeFraction(question.fraction);
   }
 
   const answer = Number(normalizePercent(question.answer));

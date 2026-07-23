@@ -1,5 +1,5 @@
 import { POWER_PAIRS } from './powers-data.js';
-import { compareRecords, saveTestResult } from './history.js';
+import { compareRecords, saveMistakes, saveTestResult } from './history.js';
 import { formatDuration } from './quiz.js';
 import {
   correctionEquation,
@@ -101,9 +101,7 @@ function renderQuestion() {
   elements.answerInput.value = question.answer;
   elements.answerInput.placeholder = baseToResult ? question.result.replace(/\d/g, '·') : '0';
   elements.answerLabel.textContent = baseToResult ? `请输入${question.topic}结果` : '请输入对应常数';
-  elements.inputHint.textContent = question.approximate && baseToResult
-    ? `可填近似值 ${question.result}，也可填写精确值`
-    : '只需填写数字';
+  elements.inputHint.textContent = '只需填写数字';
   elements.previousButton.disabled = currentIndex === 0;
   elements.nextButton.disabled = question.answer.trim() === '';
   elements.nextButtonText.textContent = position === questions.length ? '交卷' : '下一题';
@@ -151,6 +149,17 @@ function finishQuiz() {
     total: results.length,
     durationMs: elapsed
   });
+  saveMistakes('powers', mistakes.map((question) => {
+    const baseToResult = question.direction === 'base-to-result';
+    const operator = question.approximate ? '≈' : '=';
+    return {
+      id: `powers:${question.direction}:${question.id}`,
+      question: baseToResult
+        ? `${powerExpression(question)} ${operator} ?`
+        : `${question.result} ${operator} ?${exponentSymbol(question.exponent)}`,
+      answer: baseToResult ? question.result : question.base
+    };
+  }));
   renderComparison(saved.record, saved.previous);
   renderCorrections(mistakes);
   switchScreen(elements.result);

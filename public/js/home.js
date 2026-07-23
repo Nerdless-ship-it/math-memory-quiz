@@ -1,4 +1,4 @@
-import { compareRecords, formatHistoryDate, historyForType } from './history.js';
+import { compareRecords, formatHistoryDate, historyForType, mistakesForType, removeMistake } from './history.js';
 import { formatDuration } from './quiz.js';
 
 const elements = {
@@ -7,10 +7,15 @@ const elements = {
   best: document.querySelector('#history-best'),
   fastest: document.querySelector('#history-fastest'),
   list: document.querySelector('#history-list'),
-  empty: document.querySelector('#history-empty')
+  empty: document.querySelector('#history-empty'),
+  mistakeTabs: [...document.querySelectorAll('[data-mistake-type]')],
+  mistakeCount: document.querySelector('#mistakes-count'),
+  mistakeList: document.querySelector('#mistakes-list'),
+  mistakeEmpty: document.querySelector('#mistakes-empty')
 };
 
 let activeType = 'percent';
+let activeMistakeType = 'percent';
 
 function appendTextElement(parent, tagName, className, text) {
   const element = document.createElement(tagName);
@@ -58,6 +63,32 @@ function renderHistory() {
   });
 }
 
+function renderMistakes() {
+  const mistakes = mistakesForType(activeMistakeType);
+  elements.mistakeCount.textContent = String(mistakes.length);
+  elements.mistakeList.replaceChildren();
+  elements.mistakeEmpty.hidden = mistakes.length > 0;
+
+  [...mistakes].reverse().forEach((mistake) => {
+    const row = document.createElement('article');
+    row.className = 'mistake-row';
+    const content = document.createElement('div');
+    appendTextElement(content, 'strong', 'mistake-question', mistake.question);
+    appendTextElement(content, 'span', 'mistake-answer', `答案：${mistake.answer}`);
+    appendTextElement(content, 'span', 'mistake-meta', `错 ${mistake.wrongCount} 次 · 最近 ${formatHistoryDate(mistake.lastWrongAt)}`);
+    const removeButton = document.createElement('button');
+    removeButton.className = 'mistake-remove';
+    removeButton.type = 'button';
+    removeButton.textContent = '移除';
+    removeButton.addEventListener('click', () => {
+      removeMistake(mistake.id);
+      renderMistakes();
+    });
+    row.append(content, removeButton);
+    elements.mistakeList.append(row);
+  });
+}
+
 for (const tab of elements.tabs) {
   tab.addEventListener('click', () => {
     activeType = tab.dataset.historyType;
@@ -68,7 +99,24 @@ for (const tab of elements.tabs) {
   });
 }
 
-window.addEventListener('pageshow', renderHistory);
-window.addEventListener('storage', renderHistory);
+for (const tab of elements.mistakeTabs) {
+  tab.addEventListener('click', () => {
+    activeMistakeType = tab.dataset.mistakeType;
+    for (const item of elements.mistakeTabs) {
+      item.setAttribute('aria-selected', String(item === tab));
+    }
+    renderMistakes();
+  });
+}
+
+window.addEventListener('pageshow', () => {
+  renderHistory();
+  renderMistakes();
+});
+window.addEventListener('storage', () => {
+  renderHistory();
+  renderMistakes();
+});
 renderHistory();
+renderMistakes();
 document.body.dataset.historyReady = 'true';

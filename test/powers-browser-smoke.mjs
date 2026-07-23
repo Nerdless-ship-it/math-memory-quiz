@@ -116,6 +116,7 @@ try {
 
   await evaluate("document.querySelector('#start-button').click()");
   await waitFor("!document.querySelector('#quiz-screen').hidden", 'Quiz screen did not open');
+  assert(await evaluate("document.querySelector('#input-hint').textContent === '只需填写数字'"), 'Power quiz should not reveal approximate answers');
   await setViewport(390, 844, true);
   assert(await evaluate('document.documentElement.scrollWidth <= window.innerWidth'), 'Mobile question overflows horizontally');
   await screenshot('powers-quiz-question-mobile.png');
