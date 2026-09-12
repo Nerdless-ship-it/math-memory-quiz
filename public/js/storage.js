@@ -410,12 +410,29 @@ export function normalizeMistake(entry, subjectId, fallbackNow = Date.now()) {
   };
 }
 
-/** v1 错题 → v2 错题（quizType → subjectId，方向重映射，itemId 从 id 反解）。 */
+/**
+ * v1 错题 → v2 错题（quizType → subjectId，方向重映射，itemId 从 id 反解）。
+ *
+ * ⚠️ 历史坑（务必保留下面的 id 前缀兜底）：v1 的错题对象**并不含 quizType 字段**。
+ * v1 只把它存在 id 的前缀里，形如 'percent:percent-to-fraction:12.5'；
+ * quizType 只出现在 history.js 对外输出的 v1 外观上。早期实现直接读
+ * entry.quizType 并要求它属于已知科目，于是**所有真实 v1 错题都被静默丢弃**
+ * （返回 null，一条都迁不过来，而且不报错）。
+ *
+ * subjectId 的解析顺序刻意只认两个来源：
+ *   1. 显式 quizType 字段（history.js 输出的 v1 外观走这条）；
+ *   2. **可解析的 id 前缀**（真实 v1 localStorage 走这条）。
+ * 不使用 entry.subjectId —— 那属于 v2 形状，且会让 id 残缺、无法归属科目的
+ * 脏数据也混进来（应当按「不合法数据被过滤」处理，见 test/storage-v2.test.mjs）。
+ */
 export function legacyMistakeToMistake(entry, fallbackNow = Date.now()) {
   if (!isPlainObject(entry)) return null;
-  const quizType = String(entry.quizType ?? '');
-  if (!isKnownSubjectId(quizType)) return null;
-  return normalizeMistake(entry, quizType, fallbackNow);
+  const declared = String(entry.quizType ?? '').trim();
+  const { subjectId: fromId } = parseMistakeId(entry.id);
+  const quizType = (declared && isKnownSubjectId(declared) ? declared : '')
+    || (fromId && isKnownSubjectId(fromId) ? fromId : '');
+  if (!quizType) return null;
+  return normalizeMistake({ ...entry, quizType }, quizType, fallbackNow);
 }
 
 /** v2 错题 → v1 错题外观（含 quizType；字段与 v1 完全一致）。 */
@@ -448,10 +465,21 @@ function readLegacyMistakes(target) {
 
 function loadMistakes(target) {
   const current = readV2Mistakes(target);
-  if (current !== undefined) return current;
+  // 非空 v2 即信任，不回退 v1：错题有 removeMistake / clearMistakes，
+  // 若对非空 v2 做并集，刚被用户移除的错题会立刻从 v1 镜像复活。
+  if (current !== undefined && current.length > 0) return current;
   const legacy = readLegacyMistakes(target);
-  if (legacy.length) mergeMistakes(target, legacy);
-  return legacy;
+  if (legacy.length) {
+    // v2 缺失、损坏或为空数组时用 v1 兜底并合并落盘。
+    // 空数组也要兜底的原因：只要用户跑过任意一轮测试，就会写出一个空的
+    // mq:mistakes:v2（没有错题时也写），此时旧用户的 v1 错题会全部看不见。
+    // 合并而非替换，保证不会丢掉 v2 里已有的条目。
+    mergeMistakes(target, legacy);
+    return sortByLastWrongAt([...(current ?? []), ...legacy.filter(
+      (item) => !(current ?? []).some((existing) => existing.id === item.id)
+    )]);
+  }
+  return current ?? [];
 }
 
 /** 按 id 合并错题到 v2（返回新增条数）；没有新增不写盘。 */

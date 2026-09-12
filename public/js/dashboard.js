@@ -449,7 +449,10 @@ function renderWeak(body, data, labels) {
   for (const row of visible) {
     const meta = labels.get(row.subjectId) ?? { title: row.subjectId, accent: null };
     const item = element('div', 'weak-row');
-    item.dataset.subjectId = row.subjectId;
+    // 刻意用 data-weak-subject 而不是 data-subject-id：后者是「科目卡片」的标识，
+    // 看板的弱项行复用同名属性会让 `document.querySelectorAll('[data-subject-id]')`
+    // 同时数到卡片与弱项行（曾因此在首页数出 12 个科目）。命名空间分开，两边都稳。
+    item.dataset.weakSubject = row.subjectId;
     item.dataset.count = String(row.total);
 
     const name = element('span', 'weak-name', meta.title);

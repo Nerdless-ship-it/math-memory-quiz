@@ -114,7 +114,64 @@ async function startRound() {
   );
   if (!ready) return false;
   await evaluate("document.querySelector('#start-button').click()");
-  return waitFor("!document.querySelector('#quiz-screen').hidden", '点击开始后未进入答题屏');
+  const entered = await waitFor("!document.querySelector('#quiz-screen').hidden", '点击开始后未进入答题屏');
+  if (!entered) {
+    // 失败时把现场状态带出来，否则这种偶发失败无法定位（曾只报「未进入答题屏」）。
+    const state = await evaluate(`JSON.stringify({
+      url: location.pathname + location.search,
+      title: document.title,
+      quizState: document.body.dataset.quizState ?? null,
+      welcomeHidden: document.querySelector('#welcome-screen')?.hidden ?? null,
+      quizHidden: document.querySelector('#quiz-screen')?.hidden ?? null,
+      resultHidden: document.querySelector('#result-screen')?.hidden ?? null,
+      startDisabled: document.querySelector('#start-button')?.disabled ?? null,
+      progress: document.querySelector('#header-progress')?.textContent ?? null,
+      hasSession: (() => { try { return !!localStorage.getItem('mq:session:v2'); } catch { return 'n/a'; } })()
+    })`);
+    failures.push(`点击开始后未进入答题屏；现场状态 = ${state}`);
+  }
+  return entered;
+}
+
+/** 软性等待：超时返回 false 而不抛错（用于「允许失败」的探测）。 */
+async function waitForSoft(expression, attempts = 60) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try { if (await evaluate(expression)) return true; } catch {}
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return false;
+}
+
+/**
+ * 导航到目标 URL，并**确认真的落在新文档上**再返回。
+ *
+ * ⚠️ 为什么不能只 send('Page.navigate') 就往下走：
+ * navigate 返回后短时间内 Runtime.evaluate 仍可能命中**上一个文档**，
+ * 于是「点开始按钮」点在旧页面上，而后续断言在新页面上看不到已切屏 →
+ * 报「点击开始后未进入答题屏」。这是本项目最隐蔽的一类偶发失败。
+ *
+ * 判据用「由宿主持有的文档序号」：每次导航前先注册一个在新文档里写入
+ * 当前序号（1、2、3…）的初始化脚本，然后等这个序号出现。
+ * 为什么不用 URL：有些页面会合法重定向（未知科目跳回 index.html），
+ * 等目标 URL 会永远等不到。为什么不用页面内自增计数器：计数器随文档销毁，
+ * 每个新文档都是从 0 开始，永远比不出「变大了」。
+ */
+let navSeq = 0;
+async function navigateTo(target) {
+  const url = new URL(target, appUrl).href;
+  navSeq += 1;
+  const seq = navSeq;
+  // addScriptToEvaluateOnNewDocument 返回 Promise，await 后再导航可保证
+  // 下一个文档一定带着这个序号。
+  const registration = await send('Page.addScriptToEvaluateOnNewDocument', {
+    source: `window.__docSeq = ${seq};`
+  });
+  await send('Page.navigate', { url });
+  const landed = await waitForSoft(`window.__docSeq === ${seq}`, 80);
+  // 注册是一次性的，用完移除，避免脚本累积。
+  const identifier = registration?.result?.identifier;
+  if (identifier) await send('Page.removeScriptToEvaluateOnNewDocument', { identifier });
+  return landed;
 }
 
 /** 检查当前文档是否横向溢出。 */
@@ -154,11 +211,13 @@ try {
   await waitFor("document.readyState === 'complete'", '首页未加载完成');
 
   const homeInfo = JSON.parse(await evaluate(`JSON.stringify({
-    choices: document.querySelectorAll('[data-subject-id]').length,
+    // 用 .subject-card 而不是 [data-subject-id]：后者会被看板的弱项行等其它区块复用，
+    // 导致在「跑过测试的 profile」里数出多于科目数（曾数到 12）。
+    choices: document.querySelectorAll('.subject-card').length,
     hasStreak: !!document.querySelector('#dashboard-streak'),
     hasTrend: !!document.querySelector('#dashboard-trend'),
     hasWeak: !!document.querySelector('#dashboard-weak'),
-    subjects: [...document.querySelectorAll('[data-subject-id]')].map(el => el.dataset.subjectId)
+    subjects: [...document.querySelectorAll('.subject-card')].map(el => el.dataset.subjectId)
   })`));
 
   check(homeInfo.choices >= SUBJECTS.length,
@@ -198,7 +257,7 @@ try {
   const commonSubjects = SUBJECTS.filter((s) => s.category === 'common');
   for (const subject of commonSubjects) {
     const before = consoleErrors.length;
-    await navigator_(new URL(subject.page.replace('./', ''), appUrl).href);
+    await navigateTo(subject.page);
     const loaded = await waitFor(
       "document.readyState === 'complete' && !!document.querySelector('#start-button')",
       `科目 ${subject.id} 的答题页没有渲染出开始按钮`
@@ -271,11 +330,11 @@ try {
   }
 
   // ── 3. 未知科目 id 必须回落首页而不是白屏 ─────────────────────
-  await navigator_(new URL('quiz.html?subject=不存在的科目', appUrl).href);
+  await navigateTo('quiz.html?subject=不存在的科目');
   await new Promise((resolve) => setTimeout(resolve, 700));
   const fallback = JSON.parse(await evaluate(`JSON.stringify({
     hasStart: !!document.querySelector('#start-button'),
-    hasAnyCard: document.querySelectorAll('[data-subject-id]').length,
+    hasAnyCard: document.querySelectorAll('.subject-card').length,
     bodyLength: document.body.innerText.trim().length
   })`));
   check(fallback.bodyLength > 0,
@@ -286,7 +345,8 @@ try {
   // ── 4. 数学科目的既有页面不能被破坏 ────────────────────────────
   for (const id of ['percent', 'powers']) {
     const subject = SUBJECTS.find((s) => s.id === id);
-    await navigator_(new URL(subject.page.replace('./', ''), appUrl).href);
+    const landed = await navigateTo(subject.page);
+    if (!landed) { results.push({ subject: id, status: '页面未加载' }); continue; }
     const ok = await waitFor("!!document.querySelector('#start-button')",
       `数学科目 ${id} 的页面被破坏：找不到开始按钮`);
     let startedOk = false;
