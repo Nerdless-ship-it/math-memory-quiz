@@ -102,6 +102,29 @@ function toChoiceInstruction(text) {
   return source.replace(/^请?写出/, '选出');
 }
 
+/**
+ * 长题面的字号分级。
+ * 题面字号是 clamp(48px, 6vw, 76px)，只适合「12.5%」这类短题面；
+ * 常识科的题面常是整句中文（最长 30+ 字），按 76px 排版会占满整屏、
+ * 把选项挤出可视区，并且在 768–1024 的中间宽度会直接撑出横向滚动条。
+ * 按字数分三档，实际字号由 quiz.css 的 .long-prompt / .very-long-prompt 控制。
+ * 只作用于选择题（CSS 里限定 .choice-equation 之下），填空页不受影响。
+ */
+function promptLengthClass(text) {
+  const length = String(text ?? '').replace(/\s+/g, '').length;
+  if (length > 22) return 'very-long-prompt';
+  if (length > 12) return 'long-prompt';
+  return '';
+}
+
+/** 本题可能带过的字号类要先清掉，避免上一题的类残留。 */
+function applyPromptLengthClass(element, text) {
+  if (!element?.classList) return;
+  element.classList.remove('long-prompt', 'very-long-prompt');
+  const next = promptLengthClass(text);
+  if (next) element.classList.add(next);
+}
+
 /** 按 ELEMENT_IDS 批量取 DOM 句柄；缺失的元素为 null（引擎容忍缺失）。 */
 export function collectElements(root = globalThis.document) {
   const elements = {};
@@ -593,6 +616,13 @@ export function createEngine(options = {}) {
     setText(elements.questionInstruction, isChoice ? toChoiceInstruction(view.instruction) : view.instruction);
     setText(elements.promptValue, prompt.text);
     if (elements.promptValue && prompt.html) elements.promptValue.innerHTML = prompt.html;
+    // 长题面缩字号：只在选择题里生效，且必须在题面写入之后调用（要按实际文本算长度）。
+    // 填空题（percent / powers）不调用，其题面样式与字号一字不变。
+    if (isChoice) {
+      applyPromptLengthClass(elements.promptValue, prompt.text);
+    } else if (elements.promptValue?.classList) {
+      elements.promptValue.classList.remove('long-prompt', 'very-long-prompt');
+    }
     setText(elements.equationOperator, view.operator);
     if (elements.answerWrap && view.answerWrapClass !== undefined) {
       elements.answerWrap.classList.toggle('fraction-answer', Boolean(view.answerWrapClass));

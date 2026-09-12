@@ -120,9 +120,11 @@ export async function createAdapter(subject) {
       const backward = ctx.direction === 'backward';
       return {
         directionLabel: backward ? `反向 · ${dim}` : dim,
+        // 反向题的措辞刻意**不用**「前一项」：那对用户没有指向性。
+        // 反向时题面是 back、答案是 front，用户的真实任务是「选项里哪一项对应这个题面」。
         instruction: backward
-          ? `请写出「${promptOf(item, ctx)}」对应的前一项`
-          : `请写出「${promptOf(item, ctx)}」对应的答案`,
+          ? `选出与「${promptOf(item, ctx)}」对应的一项`
+          : `选出「${promptOf(item, ctx)}」对应的答案`,
         topic: subject.title
       };
     },

@@ -591,6 +591,42 @@ export function buildChoices(item, direction, pool, options)
 - 所有新增区块在 390px 宽度下不得横向溢出（有测试把关）。
 - 时政科目卡片必须显示 `更新于 YYYY-MM-DD`。
 
+### 7.1 长题面必须能换行（踩过的坑，务必保留）
+
+`styles.css` 给 `.prompt-value` 设了 `white-space: nowrap`，字号是
+`clamp(48px, 6vw, 76px)`。这对数学科的「12.5%」「17²」完全没问题，
+但常识科的题面是**整句中文**（最长 42 字，如刑法的八种犯罪列举），于是：
+
+| 窗口宽度 | 溢出 |
+|---|---|
+| 900px | **624px** |
+| 880px | **773px** |
+| 768 / 820px | 0（字号已降到 52px 下限，侥幸不溢出） |
+
+**这正是为什么只查 390px 和 1440px 永远发现不了它**——故障只发生在
+768–1024 这个中间区间。修法（`quiz.css`）：
+
+```css
+.equation.choice-equation { grid-template-columns: minmax(0, 100%); }
+.choice-equation .prompt-value {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.18;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; overflow: hidden;
+}
+.choice-equation .prompt-value.long-prompt { font-size: clamp(26px, 3.6vw, 44px); }
+.choice-equation .prompt-value.very-long-prompt { font-size: clamp(20px, 2.8vw, 34px); }
+```
+
+字号分档由 `engine.js` 的 `promptLengthClass()` 按字数打 class
+（>12 字 `long-prompt`，>22 字 `very-long-prompt`），**只作用于选择题**，
+数学科的题面仍是 `nowrap` 单行，交互一字不变。
+
+**测试要求**：溢出检查必须覆盖中间宽度，并且不能只量「第一题」——
+第一题的题面往往很短。`qa-output/overflow-audit.mjs` 现在会把题面**替换成极端长文本**
+（26/42/43 字）做压力测试，这样布局上限不依赖随机抽到哪道题；
+`qa-output/midwidth-sweep-audit.mjs` 则穷举 12 档宽度 × 全部 276 道常识题。
+
 ---
 
 ## 8. 验收标准

@@ -92,7 +92,29 @@
  * ⚠️ hidden 必须在这里显式补 `display: none`：.answer-wrap 自带 display:flex，
  * 作者样式优先级高于浏览器默认的 [hidden]{display:none}，不补这条等于没隐藏。
  */
-.equation.choice-equation { grid-template-columns: minmax(0, 1fr); }
+.equation.choice-equation { grid-template-columns: minmax(0, 100%); }
+
+/* ⚠️ 长题面必须能换行。
+   styles.css 给 .prompt-value 设了 white-space: nowrap —— 对「12.5%」「17²」没问题，
+   但常识科的题面是整句中文（如「中共中央关于国家安全工作的决策和议事协调机构」），
+   在 768–1024 这个中间宽度区间会把网格整段撑出视口。
+   实测：900px 窗口溢出 624px、880px 窗口溢出 773px，且溢出量正比于题面长度。
+   手机断点（≤760px）因为字号被降到 52px 下限而侥幸不溢出，所以只查 390/1440 永远发现不了。
+   注意这里只放开**选择题**的题面；percent / powers 的题面仍是 nowrap，交互一字不变。 */
+.choice-equation .prompt-value {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.18;
+  /* 极端长题面（>60 字）的兜底，避免题面把选项挤到屏幕外看不到 */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  overflow: hidden;
+}
+
+/* 长题面时引擎会给这里加 .long-prompt / .very-long-prompt 缩小字号 */
+.choice-equation .prompt-value.long-prompt { font-size: clamp(26px, 3.6vw, 44px); }
+.choice-equation .prompt-value.very-long-prompt { font-size: clamp(20px, 2.8vw, 34px); }
 .answer-wrap[hidden] { display: none; }
 .choice-block[hidden] { display: none; }
 
