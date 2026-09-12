@@ -114,9 +114,29 @@ npm run test:all-subjects    # 全部 10 个科目端到端 + 首页看板 + 响
 `public` 是完整的静态网站文件夹，入口是 `public/index.html`。
 **不要只上传 `index.html`**，它需要同目录的 CSS、图标以及 `public/js`、`public/subjects` 下的脚本。
 
-### Cloudflare Workers
+### 线上站点
 
-用 Workers Builds 连接本仓库时：
+| 站点 | 地址 | 触发方式 |
+| --- | --- | --- |
+| Cloudflare Pages（主站） | <https://math-memory-quiz.pages.dev/> | GitHub App 连接本仓库，推送到 `main` 自动构建 |
+| GitHub Pages | <https://nerdless-ship-it.github.io/math-memory-quiz/> | `.github/workflows/deploy-pages.yml`：推送后先跑 `npm test`，通过再发布 |
+
+### Cloudflare Pages
+
+Cloudflare 侧是 Pages 项目 `math-memory-quiz`，已用 GitHub App 连到本仓库：
+
+- 生产分支 `main`，推送到 `main` 自动构建
+- **构建命令与输出目录都留空 → 部署的就是仓库根目录**。所以根目录的 `index.html`
+  （跳转到 `./public/`）是必需的，不要删；应用本体在 `/public/` 下，真正的应用地址是
+  <https://math-memory-quiz.pages.dev/public/>
+
+⚠️ 已知现象：**用合并提交（merge commit）推送时，Pages 这次构建可能被记成推送前的提交**，
+表现为「GitHub 上已经更新、Cloudflare 还是旧内容」。判断方法是看该次部署的 Source 提交
+是不是你刚推的那个；遇到时再推一个普通提交即可刷新，或用下面的手动上传。
+
+### Cloudflare Workers（另一条可选路径）
+
+`wrangler.jsonc` 已把 `./public` 配成静态资源，用 Workers Builds 连接本仓库时：
 
 - 根目录保持仓库根目录（留空或 `/`）
 - 部署命令填 `npm run deploy:cloudflare`
@@ -127,11 +147,6 @@ npm run test:all-subjects    # 全部 10 个科目端到端 + 首页看板 + 响
 ```powershell
 npm run check:cloudflare
 ```
-
-### GitHub Pages
-
-`.github/workflows/deploy-pages.yml` 已配置好：推送到 `main` 会先跑 `npm test`，
-通过后把 `public` 作为静态站点发布。
 
 ### 直接上传
 
