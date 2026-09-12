@@ -81,6 +81,52 @@ public/
 
 ## 3. 数据契约
 
+### 3.0 模块路径基准（踩过坑，务必先读）
+
+**所有路径字符串一律以 `public/js/` 为基准解析**，并用 `registry.js` 的
+`resolveModuleUrl(path)` 转成绝对 URL 后再 `import()`。
+
+```
+适配器在 public/js/adapters/  →  './adapters/percent.js'
+题库在   public/subjects/     →  '../subjects/jieqi.item.js'
+```
+
+历史教训：`registry.contentPath()` 早期返回相对字符串，被 `js/adapters/generic.js`
+消费后解析成 `/js/subjects/x.item.js` → **404**，8 个常识科目全部打不开。
+现在 `contentPath()` / `adapterPath()` 一律返回**绝对 URL**，消费方不得自己拼基准。
+
+### 3.0.1 维度交叉与方向锁（出题正确性的核心）
+
+统一模型里 `front` 是提示、`back` 是答案。但一个科目内**多个维度会互有同名交叉**：
+
+```
+chaodai 的「开国君主」组  front='秦'  back='秦始皇嬴政'
+chaodai 的「都城」组      front='咸阳' back='秦'
+```
+
+于是「秦」既是某条的题目文本，又是另一条的答案。由此产生两个必须显式处理的后果：
+
+1. **题面歧义**：用户看到「秦」不知道要填君主还是都城。⇒ 必须显示 `tags` 派生的
+   维度提示（`registry.js` 的 `DIMENSIONS`），例如「朝代 → 开国君主」「都城 → 朝代」。
+   `DIMENSIONS` 同时是 tags 白名单，打错的标签会让提示静默失效，故有测试校验。
+
+2. **反向题无解**：`都城` 组反向问「秦 → ？」有多个正确答案；`huaxue` 的
+   `符号释义` 组（`front='H' back='氢'`）正向问「H → ？」更是完全无解。
+   ⇒ 用方向锁表达（`registry.js` 的 `LOCKED_DIRECTIONS` 与 `DIMENSION_LOCKS`）：
+
+   | 锁值 | 含义 | 例子 |
+   |---|---|---|
+   | `'forward'` | 只能正向出题（提示 front，作答 back） | `chaodai` 的「都城」组 |
+   | `'backward'` | 只能反向出题（提示 back，作答 front） | `huaxue` 的「符号释义」组 |
+   | 未登记 | 双向自由 | `lishi-changshi` |
+
+   `engine.js` 的 `createQuiz` 保证受锁条目的方向落在锁定值内；若受锁条目超过
+   反向槽位数，会牺牲方向均衡也不出无解题（`test/engine.test.mjs` 已覆盖）。
+
+**副作用（取舍，已知并接受）**：`shengxiao` / `jieqi` / `chaodai` 三科整体锁为
+`forward`，因此这三科没有反向题。这是为消除歧义付出的代价。若要恢复双向，
+需要为这些科目补写语义明确的反向条目（例如把「生肖排序第一位」写成可由生肖反查的形式）。
+
 ### 3.1 科目定义（`registry.js`）
 
 ```js
@@ -341,6 +387,46 @@ formatHistoryDate(timestamp)
 > 测试还会用 v1 键 `math-memory-quiz-history:v1` 直接注入数据，因此 `readHistory`
 > **必须能读取 v1 键**（迁移逻辑要兼容读旧键，不能只读 v2）。
 
+### 3.7.1 两条实测得出的硬规则（不写进契约就会被人「优化」掉）
+
+**规则 A：`saveRecord` 必须对数学两科双写 v1 键。**
+`test/browser-smoke.mjs` 与 `test/powers-browser-smoke.mjs` 断言
+`JSON.parse(localStorage.getItem('math-memory-quiz-history:v1')).filter(r => r.quizType === 'x').length === 2`。
+只写 `mq:records:v2` 会让这两条 e2e 立刻变红。实现为**只追加、按 id 去重、不删除、不改写**，
+符合第 8.7 节「不删旧键」。非数学科目不写旧键，避免把新格式灌进旧键。
+
+**规则 B：records 读路径用并集，mistakes 读路径用「v2 存在即信任」。**
+两者方向相反，且都是必需的：
+- records 没有任何删除 API，并集（v2 ∪ v1，按 id 去重）不会复活已删数据，
+  还能兼容「先跑一轮、之后再注入 v1」这种验收顺序。
+- mistakes 有 `removeMistake` / `clearMistakes`，若用并集，刚移除的错题会立刻从 v1 镜像复活。
+
+**规则 C：「清空数据」必须用 `clearAllData`。**
+它同时清 v1 两键与 v2 五键。只清 v2 的话，v1 镜像会在下次读取时被重新迁回。
+
+### 3.7.2 掌握度与打卡的接线（最易静默失效的地方）
+
+`engine.js` 的 `createDefaultStore` 覆盖成绩 / 错题 / 存档三个端口，而
+**掌握度与打卡走 `store.recordOutcomes` / `store.touchStreak`**。
+引擎默认已通过 `createStorageStore()` 接上 `storage.js`；若这两条链路断开，
+**不会报任何错**，只是 `mq:mastery:v2` 与打卡天数永远是空的——这是本项目最难发现的一类 bug。
+
+`createStorageStore()` 的三个刻意设计，改动前请先读懂：
+
+1. 方法体内**动态** `import('./storage.js')`。引擎在 `app.js` / `powers-app.js` 里是
+   同步创建的，模块顶层 await 会拖慢首屏，并可能让冻结 e2e 在点「开始测试」时引擎尚未就绪。
+2. 每个方法都自行 catch 且**永不 reject**。动态 import 失败若无人接住会变成
+   unhandled rejection，而冻结 e2e 断言 `consoleErrors.length === 0`。
+3. `mode === 'mistakes'` 时，同一份 outcomes 还要调用 `recordMistakeOutcome`
+   维护 `masteredCount`，连续 `MISTAKE_MASTERY_THRESHOLD`（2）次答对自动移出错题集。
+
+### 3.7.3 错题重练必须真的收窄题库
+
+`engine.start()` 一律取 `adapter.items()`，因此光传 `mode: 'mistakes'` 不会改变题量——
+「重练错题」会退化成整卷重测（按钮在撒谎）。实现见 `quiz-page.js` 的
+`buildMistakesAdapter()`：用 `Object.create(adapter, { items })` 只替换 `items()`，
+其余判题/题面/错题登记方法全部沿用原适配器，保证作答体验一致。
+
 ### 3.8 判题契约（冻结）
 
 数学两科的判题逻辑**必须保持现有行为**，因为 smoke 测试依赖它：
@@ -444,21 +530,33 @@ export function buildChoices(item, direction, pool, options)
 **必须全绿（不可修改现有测试）**
 
 ```powershell
-npm test                     # 15/15
+npm test                     # 92 项：既有 15 + 引擎 + 存储 + 掌握度 + 注册表 + 题库质量
 npm run test:browser         # percent 端到端
 npm run test:powers-browser  # powers 端到端
+npm run test:all-subjects    # 全部 10 个科目端到端 + 首页看板 + 响应式溢出
 ```
 
 **新增测试（`test/` 下，命名 `*.test.mjs` 会被 `npm test` 自动纳入）**
 
 1. `registry.test.mjs`：每个科目 id 唯一、必填字段齐全、`page` 指向真实存在的文件、
    `questionTypes` 合法、`updatedAt` 格式合法。
-2. `subjects.test.mjs`：遍历全部科目，校验 3.2 的 5 条数据质量硬性要求。
+2. `subjects.test.mjs`：遍历全部科目，校验 3.2 的 5 条数据质量硬性要求，
+   并打印「内容完整性报告」。
 3. `storage-v2.test.mjs`：v1→v2 迁移正确且幂等、不丢数据、损坏数据不抛异常；
    导出/导入往返一致；`dueItems` 按 `dueAt` 升序；`applyMastery` 的升降级规则。
-4. `engine.test.mjs`：`createQuiz` 方向均衡、`buildChoices` 干扰项去重且不含正确答案、
-   池子不足时不重复填充。
-5. `mastery.test.mjs`：level 上限、答错归零、间隔阶梯数值。
+4. `mastery.test.mjs`：level 上限、答错归零、间隔阶梯数值。
+5. `engine.test.mjs`：方向均衡、**方向锁（受锁条目永不落到被禁止方向）**、
+   适配器判分边界、存档与结算。
+6. `all-subjects-smoke.mjs`：真实浏览器遍历 10 个科目的答题页，校验首页注册表驱动、
+   看板三区块、未知科目回退、390px 无横向溢出、零 console error。
+
+**已知的测试盲区（不要以为有覆盖）**
+
+- `test/subjects.test.mjs` 的 5 条规则**只能校验结构一致性，无法校验事实正确性**。
+  法律常识与时政常识由 AI 生成，虽已尽力核实，仍可能有事实错误；
+  数据里也标注了来源与不确定条目。**内容准确性需要人工抽查**。
+- `qa-output/` 下的验收脚本（`mistakes-mode-check.mjs`、`mastery-e2e-check.mjs`）
+  是 Lead 的一次性验证，不在 `npm test` 里，且 `qa-output/` 已被 gitignore。
 
 **人工验收（Lead 执行）**
 

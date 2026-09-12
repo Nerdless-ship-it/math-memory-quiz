@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#126b52" />
+    <meta name="description" content="通用科目答题页：按 ?subject=<id> 加载注册表里的任意科目，随机双向出题，交卷后统一订正。" />
+    <title>科目训练</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./quiz.css" />
+  </head>
+  <body data-subject="" data-quiz-state="loading">
+    <noscript>
+      <p class="quiz-noscript">这个页面需要 JavaScript 才能出题。请开启后重新打开。</p>
+    </noscript>
+
+    <header class="topbar">
+      <a class="brand" href="./index.html" aria-label="返回科目选择">
+        <span class="brand-mark" id="subject-mark" aria-hidden="true">题</span>
+        <span id="subject-brand-title">科目训练</span>
+      </a>
+      <div class="topbar-actions">
+        <a class="home-link" href="./index.html" aria-label="返回科目选择">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+          <span>返回选择</span>
+        </a>
+        <div class="test-meta" id="test-meta" hidden>
+          <span><span class="meta-label">进度</span><strong id="header-progress">1 / 0</strong></span>
+          <span class="meta-divider" aria-hidden="true"></span>
+          <span><span class="meta-label">用时</span><strong id="header-time">00:00</strong></span>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <!-- 空状态：科目不存在内容 / 适配器或引擎缺失时显示，保证永远不白屏 -->
+      <section class="screen empty-screen" id="subject-empty" aria-labelledby="subject-empty-title" hidden>
+        <div class="empty-panel">
+          <span class="empty-icon" id="subject-empty-icon" aria-hidden="true">·</span>
+          <p class="section-index" id="subject-empty-index">科目训练</p>
+          <h1 id="subject-empty-title">这个科目还没准备好</h1>
+          <p class="empty-description" id="subject-empty-description">题库正在整理中，可以先练习其他科目。</p>
+          <div class="empty-actions">
+            <a class="primary-button" href="./index.html">返回选择科目</a>
+            <button class="secondary-button" id="subject-empty-retry" type="button">重新加载</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen welcome-screen" id="welcome-screen" aria-labelledby="welcome-title">
+        <div class="welcome-copy">
+          <p class="section-index" id="welcome-index">科目训练</p>
+          <h1 id="welcome-title">正在载入科目</h1>
+          <p class="welcome-description" id="welcome-description">正在读取注册表与题库，请稍候。</p>
+          <div class="welcome-actions">
+            <button class="primary-button" id="start-button" type="button" disabled>
+              <span id="start-button-text">开始测试</span>
+              <span aria-hidden="true">→</span>
+            </button>
+            <button class="secondary-button" id="resume-button" type="button" hidden>继续上次测试</button>
+          </div>
+          <p class="welcome-meta" id="welcome-meta" hidden></p>
+        </div>
+
+        <div class="sample-sheet subject-sheet" aria-label="科目信息">
+          <div class="sheet-header">
+            <span id="subject-sheet-label">科目信息</span>
+            <span id="subject-sheet-index">--</span>
+          </div>
+          <div class="subject-sheet-body">
+            <span class="subject-sheet-icon" id="subject-sheet-icon" aria-hidden="true">·</span>
+            <div>
+              <p class="subject-sheet-title" id="subject-sheet-title">—</p>
+              <p class="subject-sheet-subtitle" id="subject-sheet-subtitle">—</p>
+            </div>
+          </div>
+          <div class="sheet-rule"></div>
+          <div class="sheet-notes">
+            <span id="subject-sheet-types">—</span>
+            <span id="subject-sheet-count">— 题</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen quiz-screen" id="quiz-screen" aria-labelledby="question-instruction" hidden>
+        <div class="quiz-layout">
+          <aside class="quiz-sidebar" aria-label="测试信息">
+            <span class="question-number" id="question-number">01</span>
+            <div>
+              <p class="sidebar-label">题型</p>
+              <p class="sidebar-value" id="topic-label">—</p>
+              <p class="sidebar-direction" id="direction-label">—</p>
+            </div>
+            <div class="sidebar-rule"></div>
+            <p class="sidebar-tip">输入答案后按回车，可直接进入下一题。</p>
+          </aside>
+
+          <div class="question-area">
+            <div class="progress-track" aria-hidden="true"><span id="progress-fill"></span></div>
+            <p class="question-instruction" id="question-instruction">请作答</p>
+            <div class="equation" id="equation">
+              <span class="prompt-value" id="prompt-value">—</span>
+              <span class="equation-equals" id="equation-operator">=</span>
+              <label class="answer-wrap" id="answer-wrap" for="answer-input">
+                <span class="sr-only" id="answer-label">请输入答案</span>
+                <span class="fraction-numerator" id="fraction-numerator" aria-hidden="true" hidden>1/</span>
+                <input id="answer-input" aria-labelledby="answer-label" autocomplete="off" inputmode="text" spellcheck="false" />
+                <span class="answer-suffix" id="answer-suffix" aria-hidden="true"></span>
+              </label>
+            </div>
+            <p class="input-hint" id="input-hint">请输入答案</p>
+
+            <div class="question-actions">
+              <button class="secondary-button" id="previous-button" type="button">上一题</button>
+              <button class="primary-button compact" id="next-button" type="button" disabled>
+                <span id="next-button-text">下一题</span>
+                <span aria-hidden="true">→</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen result-screen" id="result-screen" aria-labelledby="result-title" hidden>
+        <div class="result-hero">
+          <div class="result-score-block">
+            <p class="section-index" id="result-index">测试完成</p>
+            <div class="score-line"><strong id="score-value">0</strong><span>分</span></div>
+            <h1 id="result-title">本次成绩</h1>
+          </div>
+          <div class="result-stats" aria-label="测试统计">
+            <div><span>正确率</span><strong id="accuracy-value">0%</strong></div>
+            <div><span>答对</span><strong id="correct-value">0 / 0</strong></div>
+            <div><span>总用时</span><strong id="duration-value">00:00</strong></div>
+          </div>
+        </div>
+
+        <div class="result-comparison" id="result-comparison">
+          <span id="comparison-label">首次记录</span>
+          <strong id="accuracy-comparison">本次成绩已保存</strong>
+          <strong id="time-comparison"></strong>
+        </div>
+
+        <div class="correction-section">
+          <div class="correction-heading">
+            <div>
+              <p class="section-index">订正</p>
+              <h2 id="correction-title">错题回顾</h2>
+            </div>
+            <div class="correction-actions">
+              <button class="secondary-button" id="mistakes-button" type="button" hidden>重练错题</button>
+              <button class="secondary-button" id="restart-button" type="button">再测一次</button>
+            </div>
+          </div>
+          <div class="correction-list" id="correction-list"></div>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./js/quiz-page.js"></script>
+  </body>
+</html>

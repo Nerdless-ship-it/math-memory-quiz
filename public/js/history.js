@@ -1,161 +1,109 @@
-const STORAGE_KEY = 'math-memory-quiz-history:v1';
-const MISTAKES_STORAGE_KEY = 'math-memory-quiz-mistakes:v1';
-const QUIZ_TYPES = new Set(['percent', 'powers']);
+// v1 兼容外观（契约 docs/ARCHITECTURE.md 第 3.7 节）。
+//
+// 本文件是 v1 对外的门面：导出签名与行为必须与重构前一致
+// （test/history.test.mjs 直接依赖它们），内部全部转发到 storage.js，
+// 并在出口处把 v2 的 subjectId 映射回 v1 的 quizType。
+//
+// 两个形状的边界（改代码前先记住）：
+//   storage.js  —— v2 形状：records 含 subjectId，mistakes 含 subjectId / itemId / direction
+//   本文件      —— v1 形状：records / mistakes 都含 quizType，mistakes 只有 6 个字段
+//
+// 新增导出 getRecords / getMistakes 返回 v2 形状，供新代码（看板、引擎）使用。
 
-function getStorage(storage) {
-  if (storage) return storage;
-  try {
-    return globalThis.localStorage;
-  } catch {
-    return undefined;
-  }
+import {
+  compareRecords,
+  isKnownSubjectId,
+  readMistakes as readStoredMistakes,
+  readRecords,
+  removeMistake as removeStoredMistake,
+  saveMistakes as saveStoredMistakes,
+  saveRecord
+} from './storage.js';
+
+export { compareRecords };
+
+function assertQuizType(quizType) {
+  if (!isKnownSubjectId(quizType)) throw new Error(`Unsupported quiz type: ${quizType}`);
 }
 
-function normalizeRecord(record) {
-  if (!record || !QUIZ_TYPES.has(record.quizType)) return null;
-  const normalized = {
-    id: String(record.id ?? ''),
-    quizType: record.quizType,
-    completedAt: Number(record.completedAt),
-    accuracy: Number(record.accuracy),
-    correct: Number(record.correct),
-    total: Number(record.total),
-    durationMs: Number(record.durationMs)
+/** v2 记录 → v1 记录外观（含 quizType）。 */
+function toLegacyRecord(record) {
+  return {
+    id: record.id,
+    quizType: record.subjectId,
+    completedAt: record.completedAt,
+    accuracy: record.accuracy,
+    correct: record.correct,
+    total: record.total,
+    durationMs: record.durationMs
   };
-  const numericValues = [
-    normalized.completedAt,
-    normalized.accuracy,
-    normalized.correct,
-    normalized.total,
-    normalized.durationMs
-  ];
-  if (!normalized.id || numericValues.some((value) => !Number.isFinite(value))) return null;
-  if (normalized.total <= 0 || normalized.correct < 0 || normalized.correct > normalized.total) return null;
-  if (normalized.accuracy < 0 || normalized.accuracy > 100 || normalized.durationMs < 0) return null;
-  return normalized;
 }
 
-function normalizeMistake(mistake) {
-  if (!mistake || !QUIZ_TYPES.has(mistake.quizType)) return null;
-  const normalized = {
-    id: String(mistake.id ?? ''),
-    quizType: mistake.quizType,
-    question: String(mistake.question ?? ''),
-    answer: String(mistake.answer ?? ''),
-    wrongCount: Number(mistake.wrongCount),
-    lastWrongAt: Number(mistake.lastWrongAt)
+/** v2 错题 → v1 错题外观（含 quizType，仅 v1 的 6 个字段）。 */
+function toLegacyMistake(mistake) {
+  return {
+    id: mistake.id,
+    quizType: mistake.subjectId,
+    question: mistake.question,
+    answer: mistake.answer,
+    wrongCount: mistake.wrongCount,
+    lastWrongAt: mistake.lastWrongAt
   };
-  if (!normalized.id || !normalized.question || !normalized.answer) return null;
-  if (!Number.isInteger(normalized.wrongCount) || normalized.wrongCount < 1) return null;
-  if (!Number.isFinite(normalized.lastWrongAt)) return null;
-  return normalized;
 }
 
+/** v2 形状的成绩记录（含 subjectId），按 completedAt 升序。 */
+export function getRecords(storage) {
+  return readRecords(storage);
+}
+
+/** v2 形状的错题集（含 subjectId / itemId / direction），按 lastWrongAt 升序。 */
+export function getMistakes(storage) {
+  return readStoredMistakes(storage);
+}
+
+/** → v1 形状记录数组（含 quizType），按 completedAt 升序。 */
 export function readHistory(storage) {
-  const target = getStorage(storage);
-  if (!target) return [];
-  try {
-    const parsed = JSON.parse(target.getItem(STORAGE_KEY) ?? '[]');
-    if (!Array.isArray(parsed)) return [];
-    return parsed.map(normalizeRecord).filter(Boolean).sort((left, right) => left.completedAt - right.completedAt);
-  } catch {
-    return [];
-  }
+  return readRecords(storage).map(toLegacyRecord);
 }
 
+/** → 指定 quizType 的 v1 形状记录。 */
 export function historyForType(quizType, storage) {
   return readHistory(storage).filter((record) => record.quizType === quizType);
 }
 
+/** → v1 形状错题数组（含 quizType），按 lastWrongAt 升序。 */
 export function readMistakes(storage) {
-  const target = getStorage(storage);
-  if (!target) return [];
-  try {
-    const parsed = JSON.parse(target.getItem(MISTAKES_STORAGE_KEY) ?? '[]');
-    if (!Array.isArray(parsed)) return [];
-    return parsed.map(normalizeMistake).filter(Boolean).sort((left, right) => left.lastWrongAt - right.lastWrongAt);
-  } catch {
-    return [];
-  }
+  return readStoredMistakes(storage).map(toLegacyMistake);
 }
 
+/** → 指定 quizType 的 v1 形状错题。 */
 export function mistakesForType(quizType, storage) {
   return readMistakes(storage).filter((mistake) => mistake.quizType === quizType);
 }
 
+/**
+ * 保存错题；同 id 累加 wrongCount（语义与 v1 完全一致）。
+ * → v1 形状的**全量**错题数组。
+ */
 export function saveMistakes(quizType, mistakes, storage) {
-  if (!QUIZ_TYPES.has(quizType)) throw new Error(`Unsupported quiz type: ${quizType}`);
-  const target = getStorage(storage);
-  const existing = readMistakes(target);
-  const byId = new Map(existing.map((mistake) => [mistake.id, mistake]));
-  const now = Date.now();
-
-  for (const mistake of mistakes) {
-    const current = normalizeMistake({ ...mistake, quizType, wrongCount: 1, lastWrongAt: now });
-    if (!current) continue;
-    const previous = byId.get(current.id);
-    byId.set(current.id, previous
-      ? { ...current, wrongCount: previous.wrongCount + 1, lastWrongAt: now }
-      : current);
-  }
-
-  const saved = [...byId.values()].sort((left, right) => left.lastWrongAt - right.lastWrongAt);
-  if (target) {
-    try {
-      target.setItem(MISTAKES_STORAGE_KEY, JSON.stringify(saved));
-    } catch {
-      // The test result remains available when local storage is unavailable or full.
-    }
-  }
-  return saved;
+  assertQuizType(quizType);
+  return saveStoredMistakes(quizType, mistakes, storage).map(toLegacyMistake);
 }
 
+/** 移除一道错题。→ v1 形状的全量错题数组。 */
 export function removeMistake(id, storage) {
-  const target = getStorage(storage);
-  const next = readMistakes(target).filter((mistake) => mistake.id !== id);
-  if (target) {
-    try {
-      target.setItem(MISTAKES_STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      // The UI can still render the current in-memory state after a storage failure.
-    }
-  }
-  return next;
+  return removeStoredMistake(id, storage).map(toLegacyMistake);
 }
 
+/**
+ * 保存一次测试成绩。
+ * → { record, previous }，两者都是 v1 形状（previous = 同 quizType 的上一条，没有则 null）。
+ * 记录不合法时抛 'Invalid test result'。
+ */
 export function saveTestResult(quizType, metrics, storage) {
-  if (!QUIZ_TYPES.has(quizType)) throw new Error(`Unsupported quiz type: ${quizType}`);
-  const target = getStorage(storage);
-  const history = readHistory(target);
-  const previous = [...history].reverse().find((record) => record.quizType === quizType) ?? null;
-  const completedAt = Number(metrics.completedAt ?? Date.now());
-  const record = normalizeRecord({
-    id: metrics.id ?? `${completedAt}-${Math.random().toString(36).slice(2, 10)}`,
-    quizType,
-    completedAt,
-    accuracy: metrics.accuracy,
-    correct: metrics.correct,
-    total: metrics.total,
-    durationMs: metrics.durationMs
-  });
-  if (!record) throw new Error('Invalid test result');
-
-  if (target) {
-    try {
-      target.setItem(STORAGE_KEY, JSON.stringify([...history, record]));
-    } catch {
-      // The result page still works when storage is unavailable or full.
-    }
-  }
-  return { record, previous };
-}
-
-export function compareRecords(current, previous) {
-  if (!previous) return null;
-  return {
-    accuracyDelta: current.accuracy - previous.accuracy,
-    durationDeltaMs: current.durationMs - previous.durationMs
-  };
+  assertQuizType(quizType);
+  const { record, previous } = saveRecord({ ...(metrics ?? {}), subjectId: quizType }, storage);
+  return { record: toLegacyRecord(record), previous: previous ? toLegacyRecord(previous) : null };
 }
 
 export function formatHistoryDate(timestamp) {
