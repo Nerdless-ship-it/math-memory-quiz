@@ -89,6 +89,18 @@ export const ELEMENT_IDS = Object.freeze({
 /** 侧栏提示的默认文案（与 quiz.html 的静态文本一致，填空时用）。 */
 const FILL_SIDEBAR_TIP = '输入答案后按回车，可直接进入下一题。';
 const CHOICE_SIDEBAR_TIP = '点击选项作答，选中后点「下一题」继续。';
+/** 选择题时输入框下方那行提示。刻意**不复用**侧栏文案，否则同屏出现两遍同一句话。 */
+const CHOICE_HINT = '选项顺序每轮随机';
+/**
+ * 把「请写出…」改成「选出…」。
+ * 适配器的 instruction 是按填空写的（如「请写出「元」对应的答案」），
+ * 选择题里保留「请写出」是错的措辞。
+ */
+function toChoiceInstruction(text) {
+  const source = String(text ?? '').trim();
+  if (!source) return source;
+  return source.replace(/^请?写出/, '选出');
+}
 
 /** 按 ELEMENT_IDS 批量取 DOM 句柄；缺失的元素为 null（引擎容忍缺失）。 */
 export function collectElements(root = globalThis.document) {
@@ -576,7 +588,9 @@ export function createEngine(options = {}) {
     if (elements.progressFill) elements.progressFill.style.width = `${(position / questions.length) * 100}%`;
     setText(elements.topicLabel, view.topic);
     setText(elements.directionLabel, view.directionLabel);
-    setText(elements.questionInstruction, view.instruction);
+    // 题干要求按题型改写：适配器的 instruction 是按填空写的（「请写出「元」对应的答案」），
+    // 选择题里保留「请写出」是错的措辞，改成「选出…」。
+    setText(elements.questionInstruction, isChoice ? toChoiceInstruction(view.instruction) : view.instruction);
     setText(elements.promptValue, prompt.text);
     if (elements.promptValue && prompt.html) elements.promptValue.innerHTML = prompt.html;
     setText(elements.equationOperator, view.operator);
@@ -598,6 +612,11 @@ export function createEngine(options = {}) {
       // 侧栏提示跟着题型走：选择题里提示「按回车」会误导（那时根本没有输入框）。
       setText(elements.sidebarTip, isChoice ? CHOICE_SIDEBAR_TIP : FILL_SIDEBAR_TIP);
     }
+    // 输入框下方那行提示：**必须无条件设置**。
+    // 早先这行写在 `if (choiceContainer)` 里，而 percent.html / powers.html 没有选项容器，
+    // 那两页的提示就会一直停留在上一题/静态 HTML 的文案上。
+    // 选择题用与侧栏**不同**的文案，否则「点击选项作答…」会在同屏出现两遍。
+    setText(elements.inputHint, isChoice ? CHOICE_HINT : (hints.hint ?? ''));
     const selectedOption = renderChoiceOptions(question, isChoice);
     if (elements.answerInput) {
       elements.answerInput.value = isChoice ? '' : displayValue(question.answer ?? '', prefix);
@@ -606,9 +625,9 @@ export function createEngine(options = {}) {
     }
     setText(elements.answerSuffix, isChoice ? '' : (hints.suffix ?? ''));
     setText(elements.answerLabel, isChoice ? '请选择正确选项' : hints.label);
-    setText(elements.inputHint, isChoice
-      ? '点击一个选项作答，选中后点「下一题」继续'
-      : hints.hint);
+    // 注意：inputHint 在选择题分支里已按题型设过（见上方 choiceContainer 块）。
+    // 这里不要再设一遍——曾经这里写的是「点击一个选项作答，选中后点「下一题」继续」，
+    // 与侧栏提示逐字重复，同屏出现两遍同一句话。
     if (elements.previousButton) elements.previousButton.disabled = currentIndex === 0;
     if (elements.nextButton) elements.nextButton.disabled = (question.answer ?? '').trim() === '';
     setText(elements.nextButtonText, position === questions.length ? '交卷' : '下一题');
