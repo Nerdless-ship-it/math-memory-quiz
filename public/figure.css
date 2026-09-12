@@ -1,0 +1,172 @@
+/* 图形题样式（figure.js 渲染的内联 SVG）。
+ *
+ * 约束来自 docs/ARCHITECTURE.md 第 7.3 节：固定 viewBox、宽度自适应、
+ * 390 / 891 / 1440 三档都不得横向溢出。
+ *
+ * 这些类名由 figure.js 生成，改动时请同步两个文件：
+ *   .figure-svg                     所有图形的根 <svg>
+ *   .figure-net-cell / -index       展开图的格子与序号
+ *   .figure-cube-face--a/b/c        折叠选项中三个可见面的灰阶
+ *   .figure-cube-face--hidden       被遮挡的面（不描边，只做背景）
+ *   .figure-cube-edge / --hidden    可见棱实线 / 被遮挡棱虚线
+ *   .figure-solid-face              截面图里立方体的实体面
+ *   .figure-section-face / -vertex  截面多边形与顶点
+ */
+
+.figure-svg {
+  display: block;
+  margin: 0 auto;
+  width: 100%;
+  height: auto;
+  /* 高度由 figure.js 写入的 aspect-ratio 决定；这里给上限避免大屏被拉得过高 */
+  max-height: 260px;
+  overflow: visible;
+}
+
+/* ── 题干图形 ─────────────────────────────────────────────────── */
+
+.prompt-figure {
+  margin: 18px 0 6px;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.prompt-figure .figure-svg {
+  /* 题干图形靠左对齐：题面文字是左对齐的，居中会让视线跳来跳去 */
+  margin: 0;
+  max-width: 320px;
+}
+
+/* 图形题没有可输入的题面，把原本放「12.5%」那个大字号节点让位给图 */
+.choice-equation .prompt-value:empty {
+  display: none;
+}
+
+/* ── 展开图 ───────────────────────────────────────────────────── */
+
+.figure-net-cell {
+  fill: #fbfcfb;
+  stroke: var(--ink, #17231f);
+  stroke-width: 1.6;
+}
+
+.figure-net-index {
+  fill: var(--muted, #66716d);
+  font-family: Georgia, "Noto Serif SC", serif;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+/* ── 折叠后的立体图 ───────────────────────────────────────────── */
+
+/* 三档灰阶用于区分三个可见面，保证黑白打印也能分辨 */
+.figure-cube-face { stroke: var(--ink, #17231f); stroke-width: 1.4; stroke-linejoin: round; }
+.figure-cube-face--a { fill: #e8eeea; }
+.figure-cube-face--b { fill: #cfdcd6; }
+.figure-cube-face--c { fill: #b3c8bf; }
+.figure-cube-face--hidden { fill: transparent; stroke: none; }
+.figure-cube-face--listed { fill: #f2f5f3; }
+
+.figure-cube-label {
+  fill: var(--ink, #17231f);
+  font-family: "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.figure-cube-edge {
+  stroke: var(--ink, #17231f);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+.figure-cube-edge--hidden {
+  stroke: #9aa8a2;
+  stroke-width: 1.1;
+  stroke-dasharray: 4 4;
+}
+
+/* ── 立方体截面 ───────────────────────────────────────────────── */
+
+.figure-solid-face {
+  fill: #f2f5f3;
+  stroke: none;
+}
+
+.figure-section-face {
+  fill: rgba(18, 107, 82, 0.18);
+  stroke: var(--green, #126b52);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.figure-section-vertex {
+  fill: var(--green, #126b52);
+}
+
+.figure-section-vertex-label {
+  fill: var(--green, #126b52);
+  font-family: Georgia, serif;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ── 「不可能」选项：刻意不做任何特殊样式 ─────────────────────────
+ *
+ * 这里曾经有 .figure-impossible / .figure-impossible-text（虚线方框 + 「不成立」），
+ * 用来把「平面与立方体无交」的选项画得显眼一些。那是个**会毁掉整个题型**的设计：
+ * 本库的「不可能」选项按契约必然就是答案，于是学生只要挑那个写了「不成立」的框
+ * 就能选对，完全不需要几何推理——题目退化成送分题，而数据层合法、测试全绿。
+ *
+ * 现在渲染层改成画一个中性的七边形（立方体只有 6 个面 ⇒ 七边形不可能，
+ * 正是真题最常见的陷阱选项），外观与正常选项一致。因此不再需要这两个类。
+ * 若将来要加标记，请先想清楚「这个标记会不会把答案说出来」。
+ */
+
+/* ── 图形选项：上下结构（图在上、标签在下）────────────────────── */
+
+.choice-option--figure {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 14px;
+}
+
+.choice-option--figure .choice-option-figure {
+  max-width: 200px;
+  max-height: 170px;
+  margin: 0 auto;
+}
+
+.choice-option--figure .choice-option-index {
+  align-self: flex-start;
+}
+
+.choice-option--figure .choice-option-text {
+  text-align: center;
+  font-family: Georgia, serif;
+  font-weight: 700;
+}
+
+/* 图形选项通常只有 "A"/"B"/"C"/"D" 这种单字标签，没必要占一整行；
+   而当正文恰好等于字母标号时（题库用标签做判分），会出现「A ... A」两遍，
+   引擎会给正文加这个类，这里把它隐藏，只保留标号。 */
+.choice-option--figure .choice-option-text:empty { display: none; }
+.choice-option--figure .choice-option-text--duplicate { display: none; }
+
+.choice-option-figure-broken {
+  display: inline-block;
+  padding: 18px 22px;
+  border: 1px dashed #d7a396;
+  border-radius: 6px;
+  color: var(--coral, #d75a43);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+@media (max-width: 760px) {
+  .prompt-figure .figure-svg { max-width: 100%; }
+  .choice-option--figure { padding: 12px; gap: 8px; }
+  .choice-option--figure .choice-option-figure { max-width: 100%; max-height: 140px; }
+  .figure-svg { max-height: 200px; }
+}

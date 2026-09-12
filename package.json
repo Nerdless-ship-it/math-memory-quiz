@@ -8,6 +8,7 @@
     "test": "node --test test/*.test.mjs",
     "test:browser": "node test/browser-smoke.mjs",
     "test:powers-browser": "node test/powers-browser-smoke.mjs",
+    "test:all-subjects": "node test/all-subjects-smoke.mjs",
     "check:cloudflare": "npx wrangler deploy --dry-run",
     "deploy:cloudflare": "npx wrangler deploy"
   }

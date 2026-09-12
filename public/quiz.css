@@ -1,0 +1,634 @@
+/* 通用答题页（quiz.html）+ 首页科目卡片 + 看板
+ *
+ * 设计约定：本文件不新建设计系统，只复用 styles.css / home.css 的既有变量
+ * （--ink/--muted/--line/--soft/--paper/--green/--mint/--coral/--radius/--page-padding）
+ * 与既有类（.topbar/.brand/.brand-mark/.screen/.primary-button/.secondary-button/.sample-sheet…）。
+ * 科目主色通过 --subject-accent 注入，并在 quiz-page.js 里覆盖 --green 系，
+ * 因此既有组件会自动跟随科目配色，不需要各自重写。
+ */
+
+/* ── 通用答题页 ───────────────────────────────────────────────────────── */
+
+.quiz-noscript {
+  margin: 0;
+  padding: 24px var(--page-padding);
+  color: var(--coral);
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+}
+
+.welcome-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+
+.welcome-meta {
+  margin: 18px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.subject-sheet {
+  border-color: var(--line);
+  background-color: #fbfcfb;
+  background-image: linear-gradient(rgba(18, 107, 82, 0.045) 1px, transparent 1px);
+}
+
+.subject-sheet-body {
+  min-height: 232px;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.subject-sheet-icon {
+  flex: 0 0 auto;
+  width: 78px;
+  height: 78px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--subject-accent, var(--green));
+  font-family: Georgia, "Noto Serif SC", "Songti SC", serif;
+  font-size: 34px;
+  line-height: 1;
+}
+
+.subject-sheet-title {
+  margin: 0;
+  font-family: Georgia, "Noto Serif SC", "Songti SC", serif;
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.24;
+}
+
+.subject-sheet-subtitle {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.sheet-notes span { color: var(--muted); font-size: 12px; font-weight: 700; }
+
+.sidebar-direction {
+  margin: 8px 0 0;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ── 选择题选项区（quiz.html 专有，percent.html / powers.html 没有这段 DOM）──
+ * 引擎在选择题模式下做三件事：
+ *   1. 给 .answer-wrap 与 #equation-operator 加 hidden（收起输入框与等号）；
+ *   2. 给 #equation 加 .choice-equation（题面由 3 列切单列）；
+ *   3. 往 #choice-list 里塞 .choice-option 按钮。
+ *
+ * ⚠️ hidden 必须在这里显式补 `display: none`：.answer-wrap 自带 display:flex，
+ * 作者样式优先级高于浏览器默认的 [hidden]{display:none}，不补这条等于没隐藏。
+ */
+.equation.choice-equation { grid-template-columns: minmax(0, 100%); }
+
+/* ⚠️ 长题面必须能换行。
+   styles.css 给 .prompt-value 设了 white-space: nowrap —— 对「12.5%」「17²」没问题，
+   但常识科的题面是整句中文（如「中共中央关于国家安全工作的决策和议事协调机构」），
+   在 768–1024 这个中间宽度区间会把网格整段撑出视口。
+   实测：900px 窗口溢出 624px、880px 窗口溢出 773px，且溢出量正比于题面长度。
+   手机断点（≤760px）因为字号被降到 52px 下限而侥幸不溢出，所以只查 390/1440 永远发现不了。
+   注意这里只放开**选择题**的题面；percent / powers 的题面仍是 nowrap，交互一字不变。 */
+.choice-equation .prompt-value {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.18;
+  /* 极端长题面（>60 字）的兜底，避免题面把选项挤到屏幕外看不到 */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  overflow: hidden;
+}
+
+/* 长题面时引擎会给这里加 .long-prompt / .very-long-prompt 缩小字号 */
+.choice-equation .prompt-value.long-prompt { font-size: clamp(26px, 3.6vw, 44px); }
+.choice-equation .prompt-value.very-long-prompt { font-size: clamp(20px, 2.8vw, 34px); }
+.answer-wrap[hidden] { display: none; }
+.choice-block[hidden] { display: none; }
+
+.choice-block { margin-top: 34px; }
+
+.choice-legend {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.choice-list { display: grid; gap: 12px; min-width: 0; }
+
+.choice-option {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.7;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+}
+
+.choice-option:hover { border-color: var(--subject-accent, var(--green)); }
+
+.choice-option:focus-visible {
+  outline: 2px solid var(--subject-accent, var(--green));
+  outline-offset: 2px;
+}
+
+.choice-option-index {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--subject-accent, var(--green));
+  font-family: Georgia, "Noto Serif SC", serif;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.choice-option-text { min-width: 0; overflow-wrap: anywhere; }
+
+.choice-option.is-selected {
+  border-color: var(--subject-accent, var(--green));
+  background: var(--soft);
+  box-shadow: 0 0 0 4px rgba(18, 107, 82, 0.1);
+}
+
+.choice-option.is-selected .choice-option-index {
+  border-color: var(--subject-accent, var(--green));
+  background: var(--subject-accent, var(--green));
+  color: #fff;
+}
+
+.correction-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+/* 空状态：任何降级路径的着陆点，必须体面 */
+.empty-screen {
+  min-height: calc(100vh - 76px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.empty-panel {
+  width: min(560px, 100%);
+  padding: clamp(28px, 5vw, 44px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fbfcfb;
+  box-shadow: 12px 14px 0 var(--mint);
+}
+
+.empty-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--subject-accent, var(--green));
+  font-family: Georgia, "Noto Serif SC", serif;
+  font-size: 26px;
+}
+
+.empty-panel h1 {
+  margin: 0;
+  font-family: Georgia, "Noto Serif SC", "Songti SC", serif;
+  font-size: clamp(26px, 3.4vw, 34px);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.empty-description {
+  margin: 18px 0 28px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.85;
+}
+
+.empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+/* ── 首页科目卡片（subjects-page.js 渲染）─────────────────────────────── */
+
+.subjects {
+  display: grid;
+  gap: clamp(36px, 5vw, 58px);
+  min-width: 0;
+}
+
+.subject-group { min-width: 0; }
+
+.subject-group-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  margin-bottom: 22px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--ink);
+}
+
+.subject-group-title {
+  margin: 0;
+  font-family: Georgia, "Noto Serif SC", "Songti SC", serif;
+  font-size: clamp(22px, 2.4vw, 28px);
+  font-weight: 600;
+}
+
+.subject-group-subtitle { margin: 0; color: var(--muted); font-size: 13px; }
+
+.subject-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(238px, 100%), 1fr));
+  gap: 20px;
+  min-width: 0;
+}
+
+/* 科目数少于列数时不要让卡片被拉宽去铺满整行：
+   速算只有 2 科，在 1440px 下 auto-fill 会算出 4 列，留下两列空档且卡片间距失衡。
+   用注册表传进来的 --subject-count 精确设置列数（上限 4），并且只在
+   「科目数 < 4」时收窄，因此 8 科的考公常识组完全不受影响，将来加组也自然生效。 */
+@media (min-width: 761px) {
+  .subject-group[data-subject-count="1"] .subject-grid,
+  .subject-group[data-subject-count="2"] .subject-grid,
+  .subject-group[data-subject-count="3"] .subject-grid {
+    grid-template-columns: repeat(var(--subject-count), minmax(0, 1fr));
+    /* 与 auto-fill 版保持同一列宽量级，避免两张卡被拉到 600px 宽 */
+    max-width: calc(var(--subject-count) * 300px + (var(--subject-count) - 1) * 20px);
+  }
+}
+
+.subject-card {
+  min-width: 0;
+  min-height: 208px;
+  padding: 22px 22px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--ink);
+  background: var(--paper);
+  text-decoration: none;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.subject-card:hover {
+  border-color: var(--subject-accent, var(--green));
+  transform: translateY(-3px);
+  box-shadow: 0 14px 30px rgba(23, 35, 31, 0.08);
+}
+
+.subject-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.subject-card-icon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--subject-accent, var(--green));
+  font-family: Georgia, "Noto Serif SC", serif;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.subject-card-category {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.subject-card-body { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+
+.subject-card-title {
+  font-family: Georgia, "Noto Serif SC", "Songti SC", serif;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.subject-card-subtitle {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.subject-card-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.subject-tag {
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--soft);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.subject-card-foot {
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.subject-updated,
+.subject-card-types {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.subject-updated { color: var(--subject-accent, var(--green)); }
+
+.subject-card-action {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--subject-accent, var(--green));
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.subject-card-arrow { font-size: 13px; }
+
+.subject-empty {
+  min-height: 160px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 9px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  color: var(--muted);
+  text-align: center;
+}
+
+.subject-empty strong { color: var(--ink); font-size: 16px; }
+.subject-empty span { font-size: 13px; }
+
+/* ── 看板（dashboard.js 渲染）────────────────────────────────────────── */
+
+.dashboard {
+  display: grid;
+  grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr);
+  gap: clamp(26px, 4vw, 44px);
+  min-width: 0;
+}
+
+.dashboard-block {
+  min-width: 0;
+  border-top: 1px solid var(--line);
+  padding-top: 20px;
+}
+
+.dashboard-block#dashboard-streak { grid-column: 1; }
+.dashboard-block#dashboard-trend { grid-column: 2; }
+.dashboard-block#dashboard-weak { grid-column: 1 / -1; }
+
+.dashboard-block-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.dashboard-block-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dashboard-block-note {
+  color: var(--muted);
+  font-size: 11px;
+  text-align: right;
+}
+
+.dashboard-body { min-width: 0; }
+
+.dashboard-hint {
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.dashboard-empty {
+  min-height: 132px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  color: var(--muted);
+  text-align: center;
+}
+
+.dashboard-empty strong { color: var(--ink); font-size: 15px; }
+.dashboard-empty span { font-size: 12px; line-height: 1.7; }
+
+/* 连续打卡 */
+.streak-line { display: flex; align-items: baseline; gap: 8px; color: var(--green); }
+
+.streak-value {
+  font-family: Georgia, "Noto Serif SC", serif;
+  font-size: clamp(56px, 7vw, 84px);
+  font-weight: 600;
+  line-height: 0.92;
+  font-variant-numeric: tabular-nums;
+}
+
+.streak-unit { font-size: 16px; font-weight: 700; }
+
+.streak-meta {
+  margin-top: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 正确率趋势（内联 SVG，无图表库）*/
+.trend-wrap { min-width: 0; }
+
+.trend-chart {
+  display: block;
+  width: 100%;
+  max-width: 430px;
+  height: auto;
+  overflow: visible;
+}
+
+.trend-grid { stroke: var(--line); stroke-width: 1; }
+.trend-axis { stroke: #bdc8c3; stroke-width: 1; }
+
+.trend-axis-label,
+.trend-x-label {
+  fill: var(--muted);
+  font-family: Inter, "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.trend-point-latest { stroke-width: 2; }
+
+.trend-caption {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 18px;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.trend-delta { font-size: 12px; font-weight: 700; }
+.trend-delta.positive { color: var(--green); }
+.trend-delta.negative { color: var(--coral); }
+.trend-delta.neutral { color: var(--muted); }
+
+/* 各科弱项 */
+.weak-list { display: grid; gap: 12px; min-width: 0; }
+
+.weak-row {
+  display: grid;
+  grid-template-columns: minmax(76px, 0.85fr) minmax(0, 2.4fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.weak-name {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.weak-bar {
+  display: block;
+  height: 8px;
+  min-width: 0;
+  border-radius: 999px;
+  background: var(--soft);
+  overflow: hidden;
+}
+
+.weak-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--green);
+}
+
+.weak-count {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ── 响应式 ───────────────────────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .dashboard { grid-template-columns: 1fr; }
+  .dashboard-block#dashboard-streak,
+  .dashboard-block#dashboard-trend,
+  .dashboard-block#dashboard-weak { grid-column: 1; }
+}
+
+@media (max-width: 760px) {
+  .empty-screen { min-height: calc(100vh - 66px); }
+  .empty-panel { box-shadow: 8px 10px 0 var(--mint); }
+  .subject-grid { gap: 14px; }
+  .subject-card { min-height: 180px; padding: 18px; }
+  .subject-group-heading { display: block; }
+  .subject-group-subtitle { margin-top: 8px; }
+  .welcome-actions { width: 100%; }
+  .welcome-actions .primary-button,
+  .welcome-actions .secondary-button { flex: 1 1 auto; }
+  .correction-actions { width: 100%; }
+  .correction-actions button { flex: 1; }
+  .subject-sheet-body { min-height: 168px; gap: 16px; }
+  .subject-sheet-icon { width: 62px; height: 62px; font-size: 27px; }
+  .subject-sheet-title { font-size: 24px; }
+  .weak-row { grid-template-columns: minmax(64px, 1fr) minmax(0, 1.6fr) auto; gap: 10px; }
+}
+
+/* 390px：任何新增区块都不得横向溢出 */
+@media (max-width: 390px) {
+  .empty-panel { padding: 24px 20px; box-shadow: 6px 8px 0 var(--mint); }
+  .subject-card { min-height: 0; }
+  .subject-card-title { font-size: 20px; }
+  .streak-value { font-size: 52px; }
+  .weak-row { grid-template-columns: minmax(58px, 1fr) minmax(0, 1.4fr) auto; gap: 8px; }
+  .weak-name { font-size: 12px; }
+  .weak-count { font-size: 11px; }
+  .trend-caption { font-size: 11px; }
+  /* 选择题：390px 下压缩留白与字号，保证选项一行放得下不撑出横向滚动 */
+  .choice-block { margin-top: 24px; }
+  .choice-list { gap: 10px; }
+  .choice-option { padding: 12px 13px; gap: 10px; font-size: 15px; }
+  .choice-option-index { width: 22px; height: 22px; font-size: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .subject-card { transition: none; }
+  .subject-card:hover { transform: none; }
+}

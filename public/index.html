@@ -25,46 +25,27 @@
           <p>每次完整练习都会覆盖全部题目，交卷后统一查看成绩与错题。</p>
         </div>
 
-        <div class="test-choices">
-          <a class="test-choice percent-choice" id="percent-choice" href="./percent.html">
-            <div class="choice-meta">
-              <span>01</span>
-              <span>30 题</span>
-            </div>
-            <div class="choice-math" aria-hidden="true">
-              <span>12.5%</span><span>↔</span><span class="mini-fraction"><i>1</i><i>8</i></span>
-            </div>
-            <div class="choice-footer">
-              <div>
-                <h2>百分数与分数</h2>
-                <p>双向换算</p>
-              </div>
-              <span class="choice-action">
-                开始测试
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
-              </span>
-            </div>
-          </a>
+        <!-- 科目卡片由 js/subjects-page.js 从 registry.SUBJECTS 渲染，
+             不再手写。新增科目只需改注册表 + 加数据文件。 -->
+        <div id="subjects"></div>
+      </section>
 
-          <a class="test-choice powers-choice" id="powers-choice" href="./powers.html">
-            <div class="choice-meta">
-              <span>02</span>
-              <span>24 题</span>
+      <section class="dashboard-section" aria-labelledby="dashboard-title">
+        <div class="dashboard-inner">
+          <div class="dashboard-heading">
+            <div>
+              <p class="history-label">进展</p>
+              <h2 id="dashboard-title">学习看板</h2>
             </div>
-            <div class="choice-math" aria-hidden="true">
-              <span>17<sup>2</sup></span><span>↔</span><span>289</span>
+            <div class="dashboard-actions">
+              <button class="secondary-button" id="export-button" type="button">导出数据</button>
+              <button class="secondary-button" id="import-button" type="button">导入数据</button>
+              <input id="import-input" type="file" accept="application/json,.json" hidden />
             </div>
-            <div class="choice-footer">
-              <div>
-                <h2>平方与幂次</h2>
-                <p>平方 · 立方 · 四次幂</p>
-              </div>
-              <span class="choice-action">
-                开始测试
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
-              </span>
-            </div>
-          </a>
+          </div>
+          <p class="dashboard-note" id="dashboard-note" hidden></p>
+          <!-- 打卡 / 趋势 / 弱项三块由 js/dashboard.js 渲染 -->
+          <div id="dashboard"></div>
         </div>
       </section>
 

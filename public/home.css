@@ -161,13 +161,59 @@
   stroke-linejoin: round;
 }
 
-.history-section {
+/* 首页三个横向区块（历史成绩 / 学习看板 / 错题集）共用同一套外边距与版心宽度。
+   把选择器写成一组是刻意的：看板此前完全没有样式，于是它贴着视口边缘、
+   而上面两个区块有 --page-padding + 1036px 版心，三者左边界对不齐。
+   共用一组规则后，任何一处改动都会同时作用于三者，不会再漏掉一个。 */
+.history-section,
+.dashboard-section,
+.mistakes-section {
   border-top: 1px solid var(--line);
   padding: clamp(54px, 7vw, 82px) var(--page-padding) clamp(72px, 9vw, 112px);
-  background: #f7f9f8;
 }
 
-.history-inner { width: min(1036px, 100%); margin: 0 auto; }
+.history-section { background: #f7f9f8; }
+.dashboard-section { background: white; }
+.mistakes-section { background: white; }
+
+.history-inner,
+.dashboard-inner,
+.mistakes-inner { width: min(1036px, 100%); margin: 0 auto; }
+
+/* 看板标题行：与 .history-heading / .mistakes-heading 同一套排版语言，
+   此前完全没有样式，所以「学习看板」标题与两个数据按钮是裸排的。 */
+.dashboard-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 32px;
+  margin-bottom: 28px;
+}
+
+.dashboard-heading h2 {
+  margin: 0;
+  font-family: Georgia, "Noto Serif SC", serif;
+  font-size: 32px;
+  font-weight: 600;
+}
+
+.dashboard-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.dashboard-actions .secondary-button { min-height: 42px; }
+
+.dashboard-note {
+  margin: 0 0 22px;
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dashboard-note.negative { color: var(--coral, #d75a43); }
 
 .history-heading {
   display: flex;
@@ -239,12 +285,6 @@
 .history-empty strong { color: var(--ink); font-size: 16px; }
 .history-empty span { font-size: 13px; }
 
-.mistakes-section {
-  border-top: 1px solid var(--line);
-  padding: clamp(54px, 7vw, 82px) var(--page-padding) clamp(72px, 9vw, 112px);
-  background: white;
-}
-.mistakes-inner { width: min(1036px, 100%); margin: 0 auto; }
 .mistakes-heading {
   display: flex;
   align-items: end;
@@ -313,9 +353,14 @@
   .test-choice { min-height: 280px; padding: 20px; }
   .choice-math { font-size: clamp(42px, 14vw, 58px); }
   .choice-footer h2 { font-size: 23px; }
-  .history-section { padding-left: 20px; padding-right: 20px; }
+  .history-section,
+  .dashboard-section { padding-left: 20px; padding-right: 20px; }
   .history-heading { align-items: flex-start; flex-direction: column; }
   .mistakes-heading { align-items: flex-start; flex-direction: column; }
+  /* 窄屏下看板标题与两个数据按钮必须换行，否则会挤在同一行导致溢出 */
+  .dashboard-heading { align-items: flex-start; flex-direction: column; }
+  .dashboard-actions { width: 100%; }
+  .dashboard-actions button { flex: 1; min-width: 0; padding: 0 12px; }
   .history-tabs { width: 100%; }
   .history-tabs button { flex: 1; padding: 0 8px; }
   .history-summary div { min-height: 86px; padding: 16px 10px; }
