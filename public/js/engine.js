@@ -979,8 +979,82 @@ export function createEngine(options = {}) {
       wrongAnswer.append(wrongLabel, wrongValue);
 
       row.append(rowIndex, equation, wrongAnswer);
+
+      // 图形题的订正行附一个「演示」按钮：静态图看不出「怎么折过来的 / 怎么切出来的」，
+      // 而这恰恰是理解这两类题的关键。按需动态加载动画模块，文字题完全不加载。
+      const demo = buildFigureDemo(question);
+      if (demo) row.append(demo);
+
       elements.correctionList.append(row);
     });
+  }
+
+  /**
+   * 为图形题生成「演示」按钮 + 动画挂载点。非图形题返回 null。
+   *
+   * 刻意做成**点击后才加载**：动画模块（fold-anim / fold-anim-view）有几十 KB 的
+   * 几何与渲染代码，而订正页可能一次列出几十道题——全部预加载会拖慢交卷后的首屏。
+   */
+  function buildFigureDemo(question) {
+    const kind = question?.figure?.kind;
+    if (kind !== 'figure:cube-net' && kind !== 'figure:cross-section') return null;
+
+    const wrap = doc.createElement('div');
+    wrap.className = 'correction-figure';
+    const button = doc.createElement('button');
+    button.type = 'button';
+    button.className = 'correction-demo';
+    button.textContent = kind === 'figure:cube-net' ? '演示折叠过程' : '演示切割过程';
+    button.addEventListener('click', () => { toggleFigureDemo(wrap, question); });
+    wrap.append(button);
+    return wrap;
+  }
+
+  /** 懒加载并挂载动画；失败时在按钮旁给出原因，不静默。 */
+  async function toggleFigureDemo(wrap, question) {
+    const kind = question?.figure?.kind;
+    if (wrap.dataset.demoMounted === '1') {
+      wrap.dataset.demoMounted = '';
+      wrap.querySelector('.fold-anim')?.remove();
+      wrap.querySelector('.correction-demo').textContent = kind === 'figure:cube-net' ? '演示折叠过程' : '演示切割过程';
+      return;
+    }
+    try {
+      const module = await import(/* @vite-ignore */ './fold-anim-view.js');
+      const mount = module.mountFoldAnimation;
+      if (typeof mount !== 'function') throw new Error('fold-anim-view 未导出 mountFoldAnimation');
+
+      let options;
+      if (kind === 'figure:cube-net') {
+        const cells = question.figure?.spec?.cells;
+        options = {
+          labels: (cells ?? []).map((_, index) => String(index + 1)),
+          note: '从摊平的展开图折成立方体',
+          duration: 2600
+        };
+        const handle = mount(wrap, cells, options);
+        handle.play();
+      } else {
+        // 截面演示：扫动的平面 + 实时截面。用 fold-anim-view 的同一套 3D 投影渲染。
+        const spec = question.figure?.spec ?? {};
+        const handle = mountCrossSectionDemo(wrap, module, spec);
+        handle?.play?.();
+      }
+      wrap.dataset.demoMounted = '1';
+      wrap.querySelector('.correction-demo').textContent = '收起演示';
+    } catch (error) {
+      const note = doc.createElement('p');
+      note.className = 'fold-anim-note';
+      note.textContent = `演示加载失败：${error?.message ?? error}`;
+      wrap.append(note);
+    }
+  }
+
+  /** 截面演示：让平面沿法向扫过立方体，实时显示交线多边形。 */
+  function mountCrossSectionDemo(wrap, module, spec) {
+    const mount = module.mountCrossSectionAnimation;
+    if (typeof mount !== 'function') return null;
+    return mount(wrap, spec, { duration: 3000, note: '平面扫过立方体的过程，绿色多边形是截面' });
   }
 
   function finish() {

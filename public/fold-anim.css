@@ -1,0 +1,128 @@
+/* 折叠动画样式（fold-anim-view.js 生成的内联 SVG）。
+ *
+ * 类名由 fold-anim-view.js 产生，改动时请同步两个文件：
+ *   .fold-svg          动画容器
+ *   .fold-face         每个面；--front / --side / --back 三档灰阶给出立体感
+ *   .fold-face-label   面上的展开图编号
+ *   .fold-anim         挂载点（含重播按钮）
+ */
+
+.fold-svg {
+  display: block;
+  margin: 0 auto;
+  width: 100%;
+  height: auto;
+  max-height: 240px;
+}
+
+/* 三档灰阶：朝向观察者的面最亮，侧面中灰，背面最暗。
+   动画中法向连续变化，所以这三档靠 normal.z 的阈值切换，视觉上足够表达翻转。 */
+.fold-face {
+  stroke: var(--ink, #17231f);
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+}
+
+.fold-face--front { fill: #dfe9e4; }
+.fold-face--side { fill: #b9cdc4; }
+.fold-face--back { fill: #93aea3; }
+
+/* ── 截面演示（扫动的平面 ∩ 立方体）───────────────────────────── */
+
+.section-demo-solid { fill: #f2f5f3; stroke: none; }
+.section-demo-edge {
+  stroke: var(--ink, #17231f);
+  stroke-width: 1.3;
+  stroke-linecap: round;
+}
+.section-demo-cut {
+  fill: rgba(18, 107, 82, 0.22);
+  stroke: var(--green, #126b52);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.fold-face-label {
+  fill: var(--ink, #17231f);
+  font-family: Georgia, "Noto Serif SC", serif;
+  /* 字号用 SVG 用户单位（viewBox 是 200×200 量级），不能用 px 思维的数值 */
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* ── 挂载点与重播按钮 ─────────────────────────────────────────── */
+
+.fold-anim {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.fold-anim-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.fold-anim-button {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--line, #dce3df);
+  border-radius: 6px;
+  color: var(--ink, #17231f);
+  background: white;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.fold-anim-button:hover { border-color: #a9b7b1; background: var(--soft, #f2f5f3); }
+
+.fold-anim-note {
+  color: var(--muted, #66716d);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* ── 订正行里的演示按钮与动画 ───────────────────────────────────
+ *
+ * ⚠️ .correction-row 是 3 列网格（序号 / 等式 / 你的答案）。
+ * 演示区如果按普通子元素排进去，会被塞进「序号」那一列（约 54px 宽），
+ * 动画面被压成一条，按钮文字也会竖排换行。必须显式跨满整行。
+ */
+.correction-figure {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding-top: 4px;
+}
+
+.correction-demo {
+  align-self: flex-start;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--line, #dce3df);
+  border-radius: 6px;
+  color: var(--green, #126b52);
+  background: white;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.correction-demo:hover { border-color: #a9b7b1; background: var(--soft, #f2f5f3); }
+
+/* 演示区里的动画要有确定的宽度，否则 SVG 的 width:100% 会塌成内容宽 */
+.correction-figure .fold-anim { align-items: flex-start; }
+.correction-figure .fold-anim-stage { width: 100%; max-width: 320px; }
+.correction-figure .fold-svg { max-height: 220px; }
+.correction-figure .fold-anim-note { text-align: left; }
+
+@media (max-width: 760px) {
+  .fold-svg { max-height: 200px; }
+}
