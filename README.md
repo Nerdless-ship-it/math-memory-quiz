@@ -54,13 +54,30 @@ npm start
 ## 测试
 
 ```powershell
-npm test                  # 单元测试（题库质量、存储、引擎、掌握度、注册表）
-npm run test:browser      # 百分数与分数端到端（真实浏览器）
-npm run test:powers-browser  # 平方与幂次端到端
-npm run test:all-subjects    # 全部科目端到端 + 首页看板 + 响应式溢出检查
+npm test                     # 92 项单元测试（题库质量、存储、引擎、掌握度、注册表）
+npm run test:browser         # 百分数与分数端到端（真实浏览器，冻结用例）
+npm run test:powers-browser  # 平方与幂次端到端（真实浏览器，冻结用例）
+npm run test:all-subjects    # 全部 10 个科目端到端 + 首页看板 + 响应式溢出检查
 ```
 
+`test:browser` 与 `test:powers-browser` 是升级前就存在的**冻结用例**，断言 DOM 行为与
+页面文案完全不变；它们保持全绿是本项目重构正确性的证明，因此**不要修改它们**。
+
 浏览器测试默认使用 Windows 上的 Edge，可用 `EDGE_PATH` 环境变量覆盖。
+
+> `test/` 下只有 `*.test.mjs` 会被 `npm test` 自动纳入；
+> `all-subjects-smoke.mjs` 是端到端脚本，需要先 `npm start` 起服务，需单独运行。
+
+## 已知限制
+
+- **法律常识与时政常识由 AI 生成**，虽已尽力联网核实并在数据中标注来源与不确定条目，
+  仍可能有事实错误。请以权威法条与官方文件为准，并欢迎用「导出 / 导入」修正内容。
+- **时政常识有时效性**，卡片上标注了「更新于 YYYY-MM-DD」，日期偏旧时请以最新官方表述为准。
+- **十二生肖 / 二十四节气 / 历史朝代三科目前只有正向题**。原因是这些科目的多个维度
+  互有同名交叉（同一段文字既是某题的题目、又是另一题的答案），反向出题会产生
+  「秦 → ？」这类有多个正确答案的无解题。要恢复双向需为这些科目补写语义明确的反向条目，
+  详见 `docs/ARCHITECTURE.md` 第 3.0.1 节。
+
 
 ## 部署
 

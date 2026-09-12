@@ -108,9 +108,13 @@ function createCard(subject, groupTitle) {
   card.append(body);
 
   const tags = Array.isArray(subject.tags) ? subject.tags.filter((tag) => typeof tag === 'string' && tag.trim()) : [];
-  if (tags.length) {
+  // 组名已经在卡片右上角显示过一次，标签里若出现同名（速算科的 tags 就是 ['速算']）
+  // 会在同一张卡上重复印两遍「速算」。这里过滤掉与组名相同的标签，同时保证标签行
+  // 不会因为被过滤空而留下一个空容器。
+  const visibleTags = tags.filter((tag) => tag !== groupTitle).slice(0, 3);
+  if (visibleTags.length) {
     const tagRow = element('div', 'subject-card-tags');
-    for (const tag of tags.slice(0, 3)) tagRow.append(element('span', 'subject-tag', tag));
+    for (const tag of visibleTags) tagRow.append(element('span', 'subject-tag', tag));
     card.append(tagRow);
   }
 
@@ -180,6 +184,11 @@ export async function mountSubjects(container, options = {}) {
   for (const group of groups) {
     const section = element('section', 'subject-group');
     section.dataset.category = group.id;
+    // 组内科目数同时以 data 属性与 CSS 变量暴露：
+    // data 属性给样式做可靠的列数分支（不要在 CSS 里选择 style 字符串，序列化不可靠），
+    // CSS 变量给 grid-template-columns 取实际列数。
+    section.dataset.subjectCount = String(group.subjects.length);
+    section.style.setProperty('--subject-count', String(group.subjects.length));
     section.setAttribute('aria-label', group.title);
 
     const heading = element('div', 'subject-group-heading');

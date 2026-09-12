@@ -176,6 +176,20 @@
   min-width: 0;
 }
 
+/* 科目数少于列数时不要让卡片被拉宽去铺满整行：
+   速算只有 2 科，在 1440px 下 auto-fill 会算出 4 列，留下两列空档且卡片间距失衡。
+   用注册表传进来的 --subject-count 精确设置列数（上限 4），并且只在
+   「科目数 < 4」时收窄，因此 8 科的考公常识组完全不受影响，将来加组也自然生效。 */
+@media (min-width: 761px) {
+  .subject-group[data-subject-count="1"] .subject-grid,
+  .subject-group[data-subject-count="2"] .subject-grid,
+  .subject-group[data-subject-count="3"] .subject-grid {
+    grid-template-columns: repeat(var(--subject-count), minmax(0, 1fr));
+    /* 与 auto-fill 版保持同一列宽量级，避免两张卡被拉到 600px 宽 */
+    max-width: calc(var(--subject-count) * 300px + (var(--subject-count) - 1) * 20px);
+  }
+}
+
 .subject-card {
   min-width: 0;
   min-height: 208px;

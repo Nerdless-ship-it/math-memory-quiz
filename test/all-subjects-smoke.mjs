@@ -95,6 +95,28 @@ async function navigator_(url) {
   await send('Page.navigate', { url });
 }
 
+/**
+ * 等待答题页真正就绪并点击开始。
+ *
+ * ⚠️ 必须等 `#start-button` 变为**可用**，而不是只等它出现：
+ * quiz-page.js（通用页）在引导期把开始按钮设为 disabled，直到 registry / 适配器 /
+ * 题库全部加载完才解锁。只判断「存在」会在引导未完成时点到 disabled 按钮，
+ * 于是 click 静默无效 —— 这正是本测试此前 4 次跑 3 次红的随机失败根因。
+ *
+ * 注意 percent.html / powers.html 是既有的专用页，结构里 start-button 从不 disabled，
+ * 所以这里**刻意不校验** quizState（那三个字只有通用页会设），只依赖 disabled 状态，
+ * 两种页面都能正确判定。
+ */
+async function startRound() {
+  const ready = await waitFor(
+    "(() => { const b = document.querySelector('#start-button'); return !!b && b.disabled === false; })()",
+    '答题页未在超时内就绪（开始按钮一直不可用）'
+  );
+  if (!ready) return false;
+  await evaluate("document.querySelector('#start-button').click()");
+  return waitFor("!document.querySelector('#quiz-screen').hidden", '点击开始后未进入答题屏');
+}
+
 /** 检查当前文档是否横向溢出。 */
 async function overflows() {
   return evaluate('document.documentElement.scrollWidth > window.innerWidth + 1');
@@ -186,9 +208,7 @@ try {
     const title = await evaluate('document.title');
     check(title.includes(subject.title) || title.length > 0, `科目 ${subject.id} 的页面标题异常：${title}`);
 
-    await evaluate("document.querySelector('#start-button').click()");
-    const started = await waitFor("!document.querySelector('#quiz-screen').hidden",
-      `科目 ${subject.id} 点击开始后未进入答题屏`);
+    const started = await startRound();
     if (!started) { results.push({ subject: subject.id, status: '无法开始' }); continue; }
 
     // 读出本轮题量，然后逐题作答（全部填错，只为走通流程）
@@ -269,12 +289,10 @@ try {
     await navigator_(new URL(subject.page.replace('./', ''), appUrl).href);
     const ok = await waitFor("!!document.querySelector('#start-button')",
       `数学科目 ${id} 的页面被破坏：找不到开始按钮`);
-    if (ok) {
-      await evaluate("document.querySelector('#start-button').click()");
-      await waitFor("!document.querySelector('#quiz-screen').hidden",
-        `数学科目 ${id} 无法开始答题`);
-    }
-    results.push({ subject: id, status: ok ? '页面正常' : '页面异常' });
+    let startedOk = false;
+    if (ok) startedOk = await startRound();
+    if (!startedOk) failures.push(`数学科目 ${id} 无法开始答题`);
+    results.push({ subject: id, status: ok && startedOk ? '页面正常' : '页面异常' });
   }
 
   await setViewport(390, 844, true);
