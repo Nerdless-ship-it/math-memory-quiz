@@ -61,7 +61,9 @@ export const SUBJECTS = Object.freeze([
     page: './quiz.html?subject=tiangan-dizhi',
     icon: '干',
     model: 'assoc',
-    questionTypes: ['fill', 'choice'],
+    // 常识科一律选择题（用户 2026-09 的要求）：`['choice']` 单一取值会让引擎
+    // 对每一道题都出选择题（engine.js 的 pickQuestionType：只声明一种就用那一种）。
+    questionTypes: ['choice'],
     adapter: 'generic',
     tags: ['天干', '地支', '甲子'],
     updatedAt: null
@@ -75,7 +77,9 @@ export const SUBJECTS = Object.freeze([
     page: './quiz.html?subject=shengxiao',
     icon: '肖',
     model: 'assoc',
-    questionTypes: ['fill', 'choice'],
+    // 常识科一律选择题（用户 2026-09 的要求）：`['choice']` 单一取值会让引擎
+    // 对每一道题都出选择题（engine.js 的 pickQuestionType：只声明一种就用那一种）。
+    questionTypes: ['choice'],
     adapter: 'generic',
     tags: ['生肖'],
     updatedAt: null
@@ -89,7 +93,9 @@ export const SUBJECTS = Object.freeze([
     page: './quiz.html?subject=jieqi',
     icon: '节',
     model: 'assoc',
-    questionTypes: ['fill', 'choice'],
+    // 常识科一律选择题（用户 2026-09 的要求）：`['choice']` 单一取值会让引擎
+    // 对每一道题都出选择题（engine.js 的 pickQuestionType：只声明一种就用那一种）。
+    questionTypes: ['choice'],
     adapter: 'generic',
     tags: ['节气'],
     updatedAt: null
@@ -103,7 +109,9 @@ export const SUBJECTS = Object.freeze([
     page: './quiz.html?subject=chaodai',
     icon: '朝',
     model: 'assoc',
-    questionTypes: ['fill', 'choice'],
+    // 常识科一律选择题（用户 2026-09 的要求）：`['choice']` 单一取值会让引擎
+    // 对每一道题都出选择题（engine.js 的 pickQuestionType：只声明一种就用那一种）。
+    questionTypes: ['choice'],
     adapter: 'generic',
     tags: ['朝代'],
     updatedAt: null
@@ -117,7 +125,9 @@ export const SUBJECTS = Object.freeze([
     page: './quiz.html?subject=huaxue',
     icon: '元',
     model: 'assoc',
-    questionTypes: ['fill', 'choice'],
+    // 常识科一律选择题（用户 2026-09 的要求）：`['choice']` 单一取值会让引擎
+    // 对每一道题都出选择题（engine.js 的 pickQuestionType：只声明一种就用那一种）。
+    questionTypes: ['choice'],
     adapter: 'generic',
     tags: ['元素'],
     updatedAt: null
@@ -131,7 +141,9 @@ export const SUBJECTS = Object.freeze([
     page: './quiz.html?subject=lishi-changshi',
     icon: '史',
     model: 'assoc',
-    questionTypes: ['fill', 'choice'],
+    // 常识科一律选择题（用户 2026-09 的要求）：`['choice']` 单一取值会让引擎
+    // 对每一道题都出选择题（engine.js 的 pickQuestionType：只声明一种就用那一种）。
+    questionTypes: ['choice'],
     adapter: 'generic',
     tags: ['历史常识'],
     updatedAt: null
@@ -148,7 +160,9 @@ export const SUBJECTS = Object.freeze([
     page: './quiz.html?subject=falv-changshi',
     icon: '法',
     model: 'assoc',
-    questionTypes: ['fill', 'choice'],
+    // 常识科一律选择题（用户 2026-09 的要求）：`['choice']` 单一取值会让引擎
+    // 对每一道题都出选择题（engine.js 的 pickQuestionType：只声明一种就用那一种）。
+    questionTypes: ['choice'],
     adapter: 'generic',
     tags: ['法律常识'],
     updatedAt: null
@@ -165,7 +179,9 @@ export const SUBJECTS = Object.freeze([
     page: './quiz.html?subject=shizheng',
     icon: '政',
     model: 'assoc',
-    questionTypes: ['fill', 'choice'],
+    // 常识科一律选择题（用户 2026-09 的要求）：`['choice']` 单一取值会让引擎
+    // 对每一道题都出选择题（engine.js 的 pickQuestionType：只声明一种就用那一种）。
+    questionTypes: ['choice'],
     adapter: 'generic',
     tags: ['时政常识'],
     updatedAt: '2026-07-23'

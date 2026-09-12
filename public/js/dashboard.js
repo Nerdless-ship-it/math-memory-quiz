@@ -76,10 +76,21 @@ function pad2(value) {
   return String(value).padStart(2, '0');
 }
 
-/** 'YYYY-MM-DD'（本地时区），用于打卡日期展示。 */
+/**
+ * 'YYYY-MM-DD'（本地时区），用于打卡日期展示；无法解析时返回空串（调用方据此不渲染该行）。
+ *
+ * ⚠️ 这里必须把 0 当作「没有数据」：`Number(0)` 与 `Number('')` 都是 0，
+ * `new Date(0)` 是 1970-01-01，于是「从未打卡」会显示成「最近打卡 1970-01-01」。
+ * 所以数值分支要求正数且落在合理纪元之后。
+ */
+const MIN_PLAUSIBLE_EPOCH = Date.UTC(2000, 0, 1);
+
 function formatDay(value) {
   if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) return value.trim();
-  const date = new Date(Number(value));
+  if (value === null || value === undefined || value === '') return '';
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < MIN_PLAUSIBLE_EPOCH) return '';
+  const date = new Date(numeric);
   if (Number.isNaN(date.getTime())) return '';
   return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 }
