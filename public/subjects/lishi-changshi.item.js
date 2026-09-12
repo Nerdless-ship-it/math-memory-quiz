@@ -60,5 +60,24 @@ export const ITEMS = Object.freeze([
   { id: 'lishi-46', front: '被誉为“诗仙”的唐代诗人', back: '李白', tags: ['人物'] },
   { id: 'lishi-47', front: '被誉为“画圣”的唐代画家', back: '吴道子', tags: ['人物'] },
   { id: 'lishi-48', front: '被后世尊为“茶圣”的唐代茶学家', back: '陆羽', tags: ['人物'] },
-  { id: 'lishi-49', front: '内阁制度设立于哪个朝代', back: '明朝', tags: ['制度'] }
+  { id: 'lishi-49', front: '内阁制度设立于哪个朝代', back: '明朝', tags: ['制度'] },
+
+  // ── 2026-09 二轮补充（考公高频；id 只增不改，追加在尾）──────────────
+  { id: 'lishi-50', front: '记录孔子及其弟子言行的著作', back: '《论语》', tags: ['著作'] },
+  { id: 'lishi-51', front: '相传由孔子修订的编年体史书', back: '《春秋》', tags: ['著作'] },
+  { id: 'lishi-52', front: '《汉书》的作者', back: '班固', tags: ['著作'] },
+  { id: 'lishi-53', front: '我国第一部纪传体断代史', back: '《汉书》', tags: ['著作'] },
+  { id: 'lishi-54', front: '《农政全书》的作者', back: '徐光启', tags: ['著作'] },
+  { id: 'lishi-55', front: '《窦娥冤》的作者', back: '关汉卿', tags: ['著作'] },
+  { id: 'lishi-56', front: '《诗经》的“六义”', back: '风、雅、颂、赋、比、兴', tags: ['文学'] },
+  { id: 'lishi-57', front: '成语“围魏救赵”与哪位军事家有关', back: '孙膑', tags: ['典故'] },
+  { id: 'lishi-58', front: '成语“图穷匕见”与哪位历史人物有关', back: '荆轲', tags: ['典故'] },
+  { id: 'lishi-59', front: '成语“画龙点睛”与哪位画家有关', back: '张僧繇', tags: ['典故'] },
+  { id: 'lishi-60', front: '“胡服骑射”是哪位君主推行的改革', back: '赵武灵王', tags: ['变法'] },
+  { id: 'lishi-61', front: '张骞出使西域发生在哪个朝代', back: '西汉', tags: ['事件'] },
+  { id: 'lishi-62', front: '被誉为“诗佛”的唐代诗人', back: '王维', tags: ['人物'] },
+  { id: 'lishi-63', front: '被誉为“诗鬼”的唐代诗人', back: '李贺', tags: ['人物'] },
+  { id: 'lishi-64', front: '被誉为“诗魔”的唐代诗人', back: '白居易', tags: ['人物'] },
+  { id: 'lishi-65', front: '发明地动仪的东汉科学家', back: '张衡', tags: ['人物'] },
+  { id: 'lishi-66', front: '古代科举考试中级别最高的一级', back: '殿试', tags: ['制度'] }
 ]);

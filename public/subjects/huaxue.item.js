@@ -109,5 +109,9 @@ export const ITEMS = Object.freeze([
   // ── 2026-09 内容补充：铁 26 / 铜 29 / 锌 30（考公高频原子序数）──────
   { id: 'huaxue-81', front: '铁的原子序数', back: '26', tags: ['原子序数'] },
   { id: 'huaxue-82', front: '铜的原子序数', back: '29', tags: ['原子序数'] },
-  { id: 'huaxue-83', front: '锌的原子序数', back: '30', tags: ['原子序数'] }
+  { id: 'huaxue-83', front: '锌的原子序数', back: '30', tags: ['原子序数'] },
+
+  // ── 2026-09 二轮补充：溴（常温下唯一的液态非金属，考公高频）────────
+  { id: 'huaxue-84', front: '溴', back: 'Br', tags: ['元素名称'] },
+  { id: 'huaxue-85', front: 'Br', back: '溴', tags: ['符号释义'] }
 ]);

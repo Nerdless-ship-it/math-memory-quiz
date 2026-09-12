@@ -51,6 +51,11 @@ export const ITEMS = Object.freeze([
   { id: 'chaodai-31', front: '辽', back: '耶律阿保机', tags: ['开国君主'] },
   { id: 'chaodai-32', front: '金', back: '完颜阿骨打', tags: ['开国君主'] },
 
+  // ── 2026-09 二轮补充（考公高频；id 只增不改，追加在尾）──────────────
+  { id: 'chaodai-34', front: '东周', back: '周平王', tags: ['开国君主'] },
+  { id: 'chaodai-35', front: '西夏', back: '李元昊', tags: ['开国君主'] },
+  { id: 'chaodai-36', front: '武周', back: '武则天', tags: ['开国君主'] },
+
   // ── 都城 → 朝代 ────────────────────────────────────────────
   { id: 'chaodai-19', front: '咸阳', back: '秦', tags: ['都城'] },
   { id: 'chaodai-20', front: '长安', back: '西汉', tags: ['都城'] },
@@ -64,5 +69,8 @@ export const ITEMS = Object.freeze([
   { id: 'chaodai-28', front: '北京', back: '清', tags: ['都城'] },
 
   // ── 2026-09 内容补充：建康 → 东晋（与「建业 → 东吴」「临安 → 南宋」同型）──
-  { id: 'chaodai-33', front: '建康', back: '东晋', tags: ['都城'] }
+  { id: 'chaodai-33', front: '建康', back: '东晋', tags: ['都城'] },
+
+  // ── 2026-09 二轮补充：洛邑 → 东周（平王东迁洛邑；与「洛阳 → 东汉」互为干扰项）──
+  { id: 'chaodai-37', front: '洛邑', back: '东周', tags: ['都城'] }
 ]);

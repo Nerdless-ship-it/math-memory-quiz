@@ -51,5 +51,11 @@ export const ITEMS = Object.freeze([
   { id: 'jieqi-33', front: '冰雪消融，降水渐多', back: '雨水', tags: ['节气含义'] },
   { id: 'jieqi-34', front: '一年中白昼最长的一天', back: '夏至', tags: ['节气含义'] },
   { id: 'jieqi-35', front: '暑热至此而止', back: '处暑', tags: ['节气含义'] },
-  { id: 'jieqi-36', front: '露气寒冷，将要结冰', back: '寒露', tags: ['节气含义'] }
+  { id: 'jieqi-36', front: '露气寒冷，将要结冰', back: '寒露', tags: ['节气含义'] },
+
+  // ── 2026-09 二轮补充：四立（四季之始，考公高频；id 只增不改，追加在尾）
+  { id: 'jieqi-37', front: '春季的开始', back: '立春', tags: ['节气含义'] },
+  { id: 'jieqi-38', front: '夏季的开始', back: '立夏', tags: ['节气含义'] },
+  { id: 'jieqi-39', front: '秋季的开始', back: '立秋', tags: ['节气含义'] },
+  { id: 'jieqi-40', front: '冬季的开始', back: '立冬', tags: ['节气含义'] }
 ]);

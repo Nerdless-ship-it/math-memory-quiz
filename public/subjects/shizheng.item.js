@@ -46,5 +46,14 @@ export const ITEMS = Object.freeze([
   { id: 'shizheng-29', front: '“四个自信”的内容', back: '道路自信、理论自信、制度自信、文化自信', tags: ['党章要点'] },
   { id: 'shizheng-30', front: '中国共产党成立纪念日', back: '每年7月1日', tags: ['制度安排'] },
   { id: 'shizheng-31', front: '中国人民解放军建军节', back: '每年8月1日', tags: ['制度安排'] },
-  { id: 'shizheng-32', front: '中华人民共和国国庆节', back: '每年10月1日', tags: ['制度安排'] }
+  { id: 'shizheng-32', front: '中华人民共和国国庆节', back: '每年10月1日', tags: ['制度安排'] },
+
+  // ── 2026-09-12 二轮补充（id 只增不改，追加在尾）────────────────────
+  { id: 'shizheng-33', front: '中国共产党的性质', back: '中国工人阶级的先锋队，同时是中国人民和中华民族的先锋队', tags: ['党章要点'] },
+  { id: 'shizheng-34', front: '社会主义核心价值观在国家层面的内容', back: '富强、民主、文明、和谐', tags: ['国家制度'] },
+  { id: 'shizheng-35', front: '社会主义核心价值观在社会层面的内容', back: '自由、平等、公正、法治', tags: ['国家制度'] },
+  { id: 'shizheng-36', front: '社会主义核心价值观在个人层面的内容', back: '爱国、敬业、诚信、友善', tags: ['国家制度'] },
+  { id: 'shizheng-37', front: '党的生命线和根本工作路线', back: '群众路线', tags: ['党章要点'] },
+  { id: 'shizheng-38', front: '国家公祭日', back: '每年12月13日', tags: ['制度安排'] },
+  { id: 'shizheng-39', front: '我国的爱国统一战线组织', back: '中国人民政治协商会议', tags: ['国家制度'] }
 ]);
