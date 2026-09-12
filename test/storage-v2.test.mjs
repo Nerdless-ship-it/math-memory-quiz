@@ -266,6 +266,55 @@ test('不合法的记录/错题被过滤，不会污染统计', () => {
   assert.deepEqual(readMistakes(storage), []);
 });
 
+test('v1 错题即使没有 quizType 字段也必须迁移（真实 v1 形状，曾静默全丢）', () => {
+  // ⚠️ 这是一条回归测试，针对一个曾经静默丢光数据的严重缺陷：
+  // 真实 v1 localStorage 里的错题对象**不含 quizType**，科目只存在于 id 前缀。
+  // 早期实现要求 entry.quizType 属于已知科目，于是所有真实 v1 错题都返回 null
+  // 被丢弃 —— 迁移「成功」但一条数据都没有，且不报错。
+  const storage = createStorage({
+    [LEGACY_STORAGE_KEYS.mistakes]: JSON.stringify([
+      { id: 'percent:percent-to-fraction:12.5', question: '12.5% = ?', answer: '1/8', wrongCount: 2, lastWrongAt: 10 },
+      { id: 'powers:base-to-result:square-17', question: '17² = ?', answer: '289', wrongCount: 1, lastWrongAt: 20 }
+    ])
+  });
+
+  const migrated = readMistakes(storage);
+  assert.equal(migrated.length, 2, '没有 quizType 的 v1 错题必须靠 id 前缀识别并迁移');
+  assert.deepEqual(migrated.map(({ subjectId }) => subjectId).sort(), ['percent', 'powers']);
+  assert.equal(migrated.find(({ subjectId }) => subjectId === 'percent').itemId, '12.5');
+  assert.equal(migrated.find(({ subjectId }) => subjectId === 'percent').direction, 'forward');
+  assert.equal(migrated.find(({ subjectId }) => subjectId === 'powers').direction, 'forward');
+});
+
+test('v2 错题为空数组时不得挡住 v1 错题迁移', () => {
+  // 跑过任意一轮测试就会写出一个空的 mq:mistakes:v2（即使没有错题）。
+  // 若「v2 键存在即信任」，旧用户的 v1 错题会从此永久不可见。
+  const storage = createStorage({
+    [LEGACY_STORAGE_KEYS.mistakes]: JSON.stringify([
+      { id: 'percent:percent-to-fraction:12.5', question: '12.5% = ?', answer: '1/8', wrongCount: 1, lastWrongAt: 10 }
+    ]),
+    [STORAGE_KEYS.mistakes]: '[]'
+  });
+  assert.equal(readMistakes(storage).length, 1, '空 v2 数组必须回退到 v1');
+});
+
+test('非空 v2 错题仍然优先，移除过的错题不会从 v1 镜像复活', () => {
+  // 与上一条相对：非空 v2 即信任，否则 removeMistake 的删除会被 v1 镜像撤销。
+  const storage = createStorage({
+    [LEGACY_STORAGE_KEYS.mistakes]: JSON.stringify([
+      { id: 'percent:percent-to-fraction:12.5', question: '12.5% = ?', answer: '1/8', wrongCount: 1, lastWrongAt: 10 },
+      { id: 'percent:percent-to-fraction:16.7', question: '16.7% = ?', answer: '1/6', wrongCount: 1, lastWrongAt: 11 }
+    ]),
+    [STORAGE_KEYS.mistakes]: JSON.stringify([{
+      id: 'percent:forward:16.7', subjectId: 'percent', itemId: '16.7', direction: 'forward',
+      question: '16.7% = ?', answer: '1/6', wrongCount: 1, lastWrongAt: 11, masteredCount: 0
+    }])
+  });
+  const result = readMistakes(storage);
+  assert.equal(result.length, 1, '非空 v2 即信任，不得把 v1 里已移除的 12.5 合并回来');
+  assert.equal(result[0].itemId, '16.7');
+});
+
 test('成绩记录是单一数组：两个科目共处一数组且按 completedAt 升序', () => {
   const storage = createStorage();
   saveRecord({ id: 'p1', subjectId: 'percent', completedAt: 100, accuracy: 90, correct: 27, total: 30, durationMs: 80_000 }, storage);

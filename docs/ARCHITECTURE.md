@@ -395,11 +395,37 @@ formatHistoryDate(timestamp)
 只写 `mq:records:v2` 会让这两条 e2e 立刻变红。实现为**只追加、按 id 去重、不删除、不改写**，
 符合第 8.7 节「不删旧键」。非数学科目不写旧键，避免把新格式灌进旧键。
 
-**规则 B：records 读路径用并集，mistakes 读路径用「v2 存在即信任」。**
-两者方向相反，且都是必需的：
+**规则 A2：v1 错题对象没有 `quizType` 字段，科目只存在于 id 前缀。**
+> ⚠️ 这是本项目发生过的最严重的一次静默数据丢失：`legacyMistakeToMistake` 早期直接读
+> `entry.quizType` 并要求它属于已知科目，于是**所有真实 v1 错题都返回 null 被丢弃**
+> ——迁移"成功"、无异常、无日志，但老用户升级后错题集全空。而 92 个单元测试全绿，
+> 因为它们喂的是 `history.js` 输出的 v1 外观（那种形状**才有** `quizType`），
+> 与真实 localStorage 形状不同。
+
+真实形状对照：
+
+```js
+// history.js 输出的 v1 外观（有 quizType）—— 单元测试用的是这种
+{ id: 'percent:forward:12.5', quizType: 'percent', question, answer, wrongCount, lastWrongAt }
+
+// 真实 v1 localStorage（没有 quizType）—— 用户升级时实际读到的
+{ id: 'percent:percent-to-fraction:12.5', question, answer, wrongCount, lastWrongAt }
+```
+
+因此 `subjectId` 只能来自两处：**显式 `quizType` 字段**，或**可解析的 id 前缀**
+（`parseMistakeId`）。不得把「id 无法解析」的条目也硬套一个科目，那属于脏数据，
+应被过滤（`test/storage-v2.test.mjs` 有对应断言）。
+回归测试：`test/storage-v2.test.mjs` 中「v1 错题即使没有 quizType 字段也必须迁移」。
+
+**规则 B：records 读路径用并集，mistakes 读路径用「非空 v2 即信任」。**
+两者方向不同，且都是必需的：
 - records 没有任何删除 API，并集（v2 ∪ v1，按 id 去重）不会复活已删数据，
   还能兼容「先跑一轮、之后再注入 v1」这种验收顺序。
-- mistakes 有 `removeMistake` / `clearMistakes`，若用并集，刚移除的错题会立刻从 v1 镜像复活。
+- mistakes 有 `removeMistake` / `clearMistakes`，若对**非空** v2 做并集，
+  刚移除的错题会立刻从 v1 镜像复活。
+- 但 **v2 为空数组时必须回退 v1**：用户只要跑过任意一轮测试（哪怕一题没错）
+  就会写出一个空的 `mq:mistakes:v2`，若此时「存在即信任」，旧用户的 v1 错题
+  会从此永久不可见。所以判据是「非空」而不是「存在」。
 
 **规则 C：「清空数据」必须用 `clearAllData`。**
 它同时清 v1 两键与 v2 五键。只清 v2 的话，v1 镜像会在下次读取时被重新迁回。
