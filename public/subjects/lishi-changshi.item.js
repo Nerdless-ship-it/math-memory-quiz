@@ -41,5 +41,24 @@ export const ITEMS = Object.freeze([
 
   { id: 'lishi-32', front: '被誉为“诗圣”的唐代诗人', back: '杜甫', tags: ['人物'] },
   { id: 'lishi-33', front: '被誉为“书圣”的东晋书法家', back: '王羲之', tags: ['人物'] },
-  { id: 'lishi-34', front: '被后世尊为“药王”的唐代医学家', back: '孙思邈', tags: ['人物'] }
+  { id: 'lishi-34', front: '被后世尊为“药王”的唐代医学家', back: '孙思邈', tags: ['人物'] },
+
+  // ── 2026-09 内容补充（考公高频；id 只增不改，追加在尾）──────────────
+  // 注意：back 全科唯一是硬约束（反向题不能歧义），因此「破釜沉舟 → 项羽」
+  // 「医圣 → 张仲景」这类与既有 back 撞车的条目刻意不收。
+  { id: 'lishi-35', front: '《红楼梦》的作者', back: '曹雪芹', tags: ['著作'] },
+  { id: 'lishi-36', front: '《三国演义》的作者', back: '罗贯中', tags: ['著作'] },
+  { id: 'lishi-37', front: '《水浒传》的作者', back: '施耐庵', tags: ['著作'] },
+  { id: 'lishi-38', front: '《西游记》的作者', back: '吴承恩', tags: ['著作'] },
+  { id: 'lishi-39', front: '我国第一部编年体通史', back: '《资治通鉴》', tags: ['文学'] },
+  { id: 'lishi-40', front: '成语“负荆请罪”与哪位历史人物有关', back: '廉颇', tags: ['典故'] },
+  { id: 'lishi-41', front: '成语“望梅止渴”与哪位历史人物有关', back: '曹操', tags: ['典故'] },
+  { id: 'lishi-42', front: '成语“背水一战”与哪位历史人物有关', back: '韩信', tags: ['典故'] },
+  { id: 'lishi-43', front: '成语“乐不思蜀”与哪位历史人物有关', back: '刘禅', tags: ['典故'] },
+  { id: 'lishi-44', front: '成语“单刀赴会”与哪位历史人物有关', back: '关羽', tags: ['典故'] },
+  { id: 'lishi-45', front: '成语“闻鸡起舞”与哪位历史人物有关', back: '祖逖', tags: ['典故'] },
+  { id: 'lishi-46', front: '被誉为“诗仙”的唐代诗人', back: '李白', tags: ['人物'] },
+  { id: 'lishi-47', front: '被誉为“画圣”的唐代画家', back: '吴道子', tags: ['人物'] },
+  { id: 'lishi-48', front: '被后世尊为“茶圣”的唐代茶学家', back: '陆羽', tags: ['人物'] },
+  { id: 'lishi-49', front: '内阁制度设立于哪个朝代', back: '明朝', tags: ['制度'] }
 ]);

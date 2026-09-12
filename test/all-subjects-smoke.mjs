@@ -256,7 +256,10 @@ try {
   await setViewport(1440, 900);
 
   // ── 2. 通用科目页：遍历全部非数学科目走完一轮 ────────────────────
-  const commonSubjects = SUBJECTS.filter((s) => s.category === 'common');
+  // 除速算两科（专用页，单独验证）外的全部科目都要走完一轮。
+  // 这里刻意用「非 math」而不是「common」：图形推理科（category 'figure'）也是
+  // 通用答题页科目，漏掉它就会让新增的一整个分组没有端到端覆盖。
+  const commonSubjects = SUBJECTS.filter((s) => s.category !== 'math');
   for (const subject of commonSubjects) {
     const before = consoleErrors.length;
     await navigateTo(subject.page);

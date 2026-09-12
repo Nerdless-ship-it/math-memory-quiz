@@ -332,8 +332,12 @@ test('维度交叉（huaxue）：符号与元素名互为答案，两个方向�
 });
 
 test('维度交叉（全真实题库）：选项里既不会有重复项，也不会有等于题面的项', async () => {
-  const choiceSubjects = SUBJECTS.filter((subject) => (subject.questionTypes ?? []).includes('choice'));
-  assert.ok(choiceSubjects.length >= 8, `应有至少 8 个声明了 choice 的科目，实际 ${choiceSubjects.length}`);
+  // ⚠️ 排除图形题（model === 'figure'）：它们的选项是几何算出来的、由题库自带
+  // （choiceTexts / choiceFigures），根本不经过 buildChoices，
+  // 而且 front 是固定题干文案、back 是选项标签，套用「文本维度交叉」的判据没有意义。
+  const choiceSubjects = SUBJECTS.filter((subject) => (subject.questionTypes ?? []).includes('choice')
+    && subject.model !== 'figure');
+  assert.ok(choiceSubjects.length >= 8, `应有至少 8 个声明了 choice 的文字科目，实际 ${choiceSubjects.length}`);
 
   let crossingCases = 0;      // 池子里真的存在「与题面同文的候选」的次数
   let checkedItems = 0;

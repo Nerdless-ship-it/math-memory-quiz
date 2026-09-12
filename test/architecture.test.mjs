@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 import { readFile, readdir, writeFile, mkdir, rm, access } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { join, relative } from 'node:path';
-import { SUBJECTS, getSubject, adapterPath, contentPath } from '../public/js/registry.js';
+import { SUBJECTS, CATEGORIES, getSubject, adapterPath, contentPath } from '../public/js/registry.js';
 
 const projectRoot = fileURLToPath(new URL('../', import.meta.url));
 const jsDir = join(projectRoot, 'public', 'js');
@@ -137,7 +137,12 @@ test('E. 科目卡片所需的展示字段齐全（渲染器不再做兜底判�
     assert.ok(subject.page, `科目 ${subject.id} 缺 page`);
     assert.match(subject.accent, /^#[0-9a-f]{6}$/i, `科目 ${subject.id} 的 accent 必须是 6 位十六进制色值`);
     assert.ok(subject.icon, `科目 ${subject.id} 缺 icon`);
-    assert.ok(['math', 'common'].includes(subject.category), `科目 ${subject.id} 的 category 非法`);
+    // 以注册表的 CATEGORIES 为唯一真相源，而不是在这里再抄一份白名单——
+    // 否则每加一个分组都要改两处，且漏改时失败信息会指向错误的地方。
+    assert.ok(
+      CATEGORIES.some((category) => category.id === subject.category),
+      `科目 ${subject.id} 的 category "${subject.category}" 未在注册表 CATEGORIES 中登记`
+    );
     assert.ok(Array.isArray(subject.questionTypes) && subject.questionTypes.length > 0);
     for (const type of subject.questionTypes) {
       assert.ok(['fill', 'choice'].includes(type), `科目 ${subject.id} 的 questionTypes 含非法值 ${type}`);

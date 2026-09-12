@@ -105,8 +105,46 @@ test('科目内 id 唯一', () => {
   });
 });
 
+/** 条目在某个维度上的「身份键」：图形题用整张图，文字题用字段值。 */
+function identityKey(item, field) {
+  if (field === 'figure') return JSON.stringify(item?.figure ?? null);
+  if (field === 'choices') return JSON.stringify(item?.choiceFigures ?? item?.choiceTexts ?? null);
+  return normalizeForCompare(String(item?.[field] ?? ''));
+}
+
+function normalizeForCompare(value) {
+  return value.replace(/\s+/g, '');
+}
+
+/**
+ * 重复项检查的通用实现。
+ *
+ * 放行规则（`allowDuplicateFront` / `allowDuplicateBack`）**不是「跳过检查」**：
+ * 而是把唯一性判据换成科目声明的身份键（`uniqueBy`）。
+ * 图形题的 front 是固定题干文案、back 是选项标签，文字上重复是内容特性；
+ * 但**每道题本身必须仍然可区分**，否则就是真的在重复出同一道题。
+ */
+function checkDuplicates(subject, items, field, allowFlag, uniqueBy) {
+  const keyField = uniqueBy ?? field;
+  const keys = items.map((item) => identityKey(item, keyField));
+  const uniqueCount = new Set(keys).size;
+  assert.equal(
+    uniqueCount,
+    items.length,
+    `科目 ${subject.id} 放行了重复 ${field}，但按「${keyField}」判定的题目身份必须唯一：` +
+      `${items.length} 条里只有 ${uniqueCount} 个不同身份，存在真正重复的题`
+  );
+}
+
 test('科目内 front 不重复（否则同一道题会被问两次）', () => {
   eachLoadedSubject((subject, items) => {
+    // 图形题的题干是**固定文案**（如「该立方体被平面所截，截面不可能是」），
+    // 各题差别在图上，不在文字上 —— 这类科目显式放行重复 front，
+    // 但要求每条题的身份键唯一（见 checkDuplicates）。
+    if (subject.allowDuplicateFront) {
+      checkDuplicates(subject, items, 'front', true, subject.uniqueBy);
+      return;
+    }
     const seen = new Map();
     const duplicates = [];
     for (const item of items) {
@@ -117,14 +155,18 @@ test('科目内 front 不重复（否则同一道题会被问两次）', () => {
     assert.deepEqual(
       duplicates,
       [],
-      `科目 ${subject.id} 存在重复 front，会导致同一题重复出现：${[...new Set(duplicates)].join(' / ')}`
+      `科目 ${subject.id} 存在重复 front，会导致同一题重复出现：${[...new Set(duplicates)].join(' / ')}` +
+        `（若题干文案本就固定、差异在图上，请在 registry.js 里为该科设 allowDuplicateFront: true + uniqueBy）`
     );
   });
 });
 
 test('科目内 back 不重复（除非科目显式允许）', () => {
   eachLoadedSubject((subject, items) => {
-    if (subject.allowDuplicateBack) return;
+    if (subject.allowDuplicateBack) {
+      checkDuplicates(subject, items, 'back', true, subject.uniqueBy);
+      return;
+    }
     const seen = new Map();
     const duplicates = [];
     for (const item of items) {
@@ -136,7 +178,7 @@ test('科目内 back 不重复（除非科目显式允许）', () => {
       duplicates,
       [],
       `科目 ${subject.id} 存在重复 back，会让「由 back 反查 front」出现多解：` +
-        `${[...new Set(duplicates)].join(' / ')}（若属内容特性，请在 registry.js 里为该科设 allowDuplicateBack: true）`
+        `${[...new Set(duplicates)].join(' / ')}（若属内容特性，请在 registry.js 里为该科设 allowDuplicateBack: true + uniqueBy）`
     );
   });
 });

@@ -31,5 +31,13 @@ export const ITEMS = Object.freeze([
   { id: 'shengxiao-15', front: '生肖排序第三位', back: '虎', tags: ['生肖排序'] },
   { id: 'shengxiao-16', front: '生肖排序第四位', back: '兔', tags: ['生肖排序'] },
   { id: 'shengxiao-17', front: '生肖排序第五位', back: '龙', tags: ['生肖排序'] },
-  { id: 'shengxiao-18', front: '生肖排序第十二位', back: '猪', tags: ['生肖排序'] }
+  { id: 'shengxiao-18', front: '生肖排序第十二位', back: '猪', tags: ['生肖排序'] },
+
+  // ── 2026-09 内容补充：第 6–11 位锚点（此前完全考不到；id 只增不改，追加在尾）
+  { id: 'shengxiao-19', front: '生肖排序第六位', back: '蛇', tags: ['生肖排序'] },
+  { id: 'shengxiao-20', front: '生肖排序第七位', back: '马', tags: ['生肖排序'] },
+  { id: 'shengxiao-21', front: '生肖排序第八位', back: '羊', tags: ['生肖排序'] },
+  { id: 'shengxiao-22', front: '生肖排序第九位', back: '猴', tags: ['生肖排序'] },
+  { id: 'shengxiao-23', front: '生肖排序第十位', back: '鸡', tags: ['生肖排序'] },
+  { id: 'shengxiao-24', front: '生肖排序第十一位', back: '狗', tags: ['生肖排序'] }
 ]);

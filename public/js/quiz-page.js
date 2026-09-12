@@ -399,7 +399,8 @@ async function main() {
   renderSubjectChrome(subject, nodes, 0);
   document.body.dataset.quizState = 'loading';
 
-  // 2) 装载适配器与题库。
+  // 3) 装载适配器。图形题走 figure-choice（它是 generic 的包装层），
+  //    其余科目仍走各自的适配器。两条路径的判分与订正语义一致。
   const { adapter, failures } = await loadAdapter(subject, registry);
   if (!adapter) {
     showEmptyState(nodes, {

@@ -44,6 +44,13 @@ export const ITEMS = Object.freeze([
   { id: 'chaodai-17', front: '清', back: '皇太极', tags: ['开国君主'] },
   { id: 'chaodai-18', front: '后金', back: '努尔哈赤', tags: ['开国君主'] },
 
+  // ── 2026-09 内容补充：东晋 / 南宋 / 辽 / 金（id 只增不改，追加在尾）。
+  // 南宋此前只有都城条目（临安 → 南宋）却没有君主条目，属明显缺口。
+  { id: 'chaodai-29', front: '东晋', back: '司马睿', tags: ['开国君主'] },
+  { id: 'chaodai-30', front: '南宋', back: '赵构', tags: ['开国君主'] },
+  { id: 'chaodai-31', front: '辽', back: '耶律阿保机', tags: ['开国君主'] },
+  { id: 'chaodai-32', front: '金', back: '完颜阿骨打', tags: ['开国君主'] },
+
   // ── 都城 → 朝代 ────────────────────────────────────────────
   { id: 'chaodai-19', front: '咸阳', back: '秦', tags: ['都城'] },
   { id: 'chaodai-20', front: '长安', back: '西汉', tags: ['都城'] },
@@ -54,5 +61,8 @@ export const ITEMS = Object.freeze([
   { id: 'chaodai-25', front: '临安', back: '南宋', tags: ['都城'] },
   { id: 'chaodai-26', front: '大都', back: '元', tags: ['都城'] },
   { id: 'chaodai-27', front: '南京', back: '明', tags: ['都城'] },
-  { id: 'chaodai-28', front: '北京', back: '清', tags: ['都城'] }
+  { id: 'chaodai-28', front: '北京', back: '清', tags: ['都城'] },
+
+  // ── 2026-09 内容补充：建康 → 东晋（与「建业 → 东吴」「临安 → 南宋」同型）──
+  { id: 'chaodai-33', front: '建康', back: '东晋', tags: ['都城'] }
 ]);

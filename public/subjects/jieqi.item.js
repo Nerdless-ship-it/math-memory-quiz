@@ -44,5 +44,12 @@ export const ITEMS = Object.freeze([
   { id: 'jieqi-29', front: '麦类等有芒作物成熟', back: '芒种', tags: ['节气含义'] },
   { id: 'jieqi-30', front: '天气转凉，露凝而白', back: '白露', tags: ['节气含义'] },
   { id: 'jieqi-31', front: '天气渐冷，开始降霜', back: '霜降', tags: ['节气含义'] },
-  { id: 'jieqi-32', front: '白昼最短，开始数九', back: '冬至', tags: ['节气含义'] }
+  { id: 'jieqi-32', front: '白昼最短，开始数九', back: '冬至', tags: ['节气含义'] },
+
+  // ── 2026-09 内容补充：再收 4 个释义无歧义的节气（id 只增不改，追加在尾）。
+  // 小/大对（小暑大暑、小雪大雪、小寒大寒）的释义彼此难分，刻意不收，与既有口径一致。
+  { id: 'jieqi-33', front: '冰雪消融，降水渐多', back: '雨水', tags: ['节气含义'] },
+  { id: 'jieqi-34', front: '一年中白昼最长的一天', back: '夏至', tags: ['节气含义'] },
+  { id: 'jieqi-35', front: '暑热至此而止', back: '处暑', tags: ['节气含义'] },
+  { id: 'jieqi-36', front: '露气寒冷，将要结冰', back: '寒露', tags: ['节气含义'] }
 ]);

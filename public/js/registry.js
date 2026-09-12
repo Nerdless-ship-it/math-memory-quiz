@@ -10,7 +10,10 @@
 
 export const CATEGORIES = Object.freeze([
   { id: 'math', title: '速算', subtitle: '数字记忆与心算基本功' },
-  { id: 'common', title: '考公常识', subtitle: '固定配对常识，双向回忆训练' }
+  { id: 'common', title: '考公常识', subtitle: '固定配对常识，双向回忆训练' },
+  // 图形推理单列一组：它既不是「配对常识」（题面是图、选项是图），
+  // 也不是速算，混进常识组会让人以为它也是文字题。
+  { id: 'figure', title: '图形推理', subtitle: '看图作答，选项也是图' }
 ]);
 
 export const SUBJECTS = Object.freeze([
@@ -152,9 +155,6 @@ export const SUBJECTS = Object.freeze([
     id: 'falv-changshi',
     title: '法律常识',
     subtitle: '宪法 · 民法 · 刑法要点',
-    // allowDuplicateBack：法律常识存在多条共用同一结论的情形（如多个条款都指向
-    // 「全国人民代表大会」），重复 back 在此科是内容特性而非数据错误，故显式放行。
-    allowDuplicateBack: true,
     category: 'common',
     accent: '#a83232',
     page: './quiz.html?subject=falv-changshi',
@@ -184,7 +184,53 @@ export const SUBJECTS = Object.freeze([
     questionTypes: ['choice'],
     adapter: 'generic',
     tags: ['时政常识'],
-    updatedAt: '2026-07-23'
+    updatedAt: '2026-09-12'
+  },
+
+  // ── 图形推理 ────────────────────────────────────────────────────
+  // 题面与选项都是图，走 figure-choice 适配器（generic 的包装层）。
+  // 每题只有一个正确方向（图→选），因此整体锁 forward：反向题（「选哪个展开图」）
+  // 在数据上不成立，强行出会产生无解题目。
+  {
+    id: 'cube-net',
+    title: '正方体展开图',
+    subtitle: '展开图 → 折叠后的立体图',
+    category: 'figure',
+    accent: '#2f6f7f',
+    page: './quiz.html?subject=cube-net',
+    icon: '展',
+    model: 'figure',
+    questionTypes: ['choice'],
+    adapter: 'figure-choice',
+    tags: ['图形推理'],
+    lockedDirection: 'forward',
+    updatedAt: null,
+    // 图形题：back 是选项标签 A/B/C/D，重复是内容特性而非数据错误。
+    allowDuplicateBack: true,
+    // 题目身份：题干展开图 + 四个选项组合（front/back 都是模板文案，不能用来区分题目）
+    uniqueBy: 'choices'
+  },
+  {
+    id: 'cross-section',
+    title: '立方体截面图',
+    subtitle: '立体被平面所截 → 判断截面',
+    category: 'figure',
+    accent: '#7f4f8f',
+    page: './quiz.html?subject=cross-section',
+    icon: '截',
+    model: 'figure',
+    questionTypes: ['choice'],
+    adapter: 'figure-choice',
+    tags: ['图形推理'],
+    lockedDirection: 'forward',
+    updatedAt: null,
+    // 图形题：题干文案固定（差异全在选项里）、back 是选项标签 A/B/C/D，
+    // 两种重复都是内容特性而非数据错误。放行不等于不检查——
+    // 测试会用 uniqueBy:'choices' 确认每条题目的选项组合互不相同。
+    allowDuplicateFront: true,
+    allowDuplicateBack: true,
+    // 题干 24 条完全相同（差异全在选项里），题目身份用选项组合
+    uniqueBy: 'choices'
   }
 ]);
 
@@ -213,7 +259,8 @@ export const JS_BASE_URL = new URL('./', import.meta.url);
 const ADAPTER_PATHS = new Map([
   ['percent', './adapters/percent.js'],
   ['powers', './adapters/powers.js'],
-  ['generic', './adapters/generic.js']
+  ['generic', './adapters/generic.js'],
+  ['figure-choice', './adapters/figure-choice.js']
 ]);
 
 /**
@@ -273,7 +320,15 @@ export const DIMENSIONS = Object.freeze({
     国家战略: '国家战略',
     制度安排: '制度安排',
     五年规划: '五年规划',
-    国家制度: '国家制度'
+    国家制度: '国家制度',
+    党章要点: '党章要点'
+  }),
+  // 图形推理：题面与选项都是图，提示词只用来标注题型，不承载「方向」语义。
+  'cube-net': Object.freeze({
+    展开图折叠: '展开图 → 立体图'
+  }),
+  'cross-section': Object.freeze({
+    截面图: '立体被截 → 截面形状'
   })
 });
 
@@ -321,13 +376,27 @@ export const LOCKED_DIRECTIONS = Object.freeze({
 });
 
 /**
+ * 按科目条目自身声明的方向锁（`subject.lockedDirection`）。
+ * 图形推理两科走这条：把锁写在科目条目里，比在下表里再抄一遍难漏。
+ */
+const SUBJECT_LOCKED_DIRECTIONS = new Map(
+  SUBJECTS.filter((subject) => subject.lockedDirection).map((subject) => [subject.id, subject.lockedDirection])
+);
+
+/**
  * 按维度覆盖的方向锁，优先于 LOCKED_DIRECTIONS。
  * 键形如 `${subjectId}:${tag}`。
  */
 export const DIMENSION_LOCKS = Object.freeze({
-  // 符号维度：提示是元素符号（front），作答是元素名（back 的「氢」）。
-  // 该维度的数据写作 front='H' back='氢'，正向问「H → ？」无解，必须反向。
-  'huaxue:符号释义': 'backward'
+  // 符号维度：数据写作 front='H' back='氢'，锁反向后出题是「提示元素名（back）、
+  // 作答元素符号（front）」，与界面标注「反向 · 元素符号 → 元素名称」一致。
+  'huaxue:符号释义': 'backward',
+  // 元素名称维度同步锁反向。它与符号释义是同一配对（名称 ↔ 符号）的两组数据：
+  // 若保持双向自由，其正向题「氢 → 选 H」会与符号释义的反向题逐字重复
+  // （200 轮实测每轮平均 20.3 道重复题）。锁成镜像互补后每轮各问一次，互不重复。
+  // 连带效果：原子序数维度（无锁）因反向槽位被占满而全部落到正向
+  // （「氢的原子序数」→ 选数字），不会再出现「选出与「1」对应的一项」这类别扭反向题。
+  'huaxue:元素名称': 'backward'
 });
 
 /** 取某个维度的方向锁；未登记返回 null 表示双向自由。 */
@@ -338,7 +407,7 @@ export function lockedDirection(subjectId, tags) {
       if (override) return override;
     }
   }
-  return LOCKED_DIRECTIONS[subjectId] ?? null;
+  return LOCKED_DIRECTIONS[subjectId] ?? SUBJECT_LOCKED_DIRECTIONS.get(subjectId) ?? null;
 }
 
 const CONTENT_PATHS = new Map([
@@ -349,7 +418,9 @@ const CONTENT_PATHS = new Map([
   ['huaxue', '../subjects/huaxue.item.js'],
   ['lishi-changshi', '../subjects/lishi-changshi.item.js'],
   ['falv-changshi', '../subjects/falv-changshi.item.js'],
-  ['shizheng', '../subjects/shizheng.item.js']
+  ['shizheng', '../subjects/shizheng.item.js'],
+  ['cube-net', '../subjects/cube-net.item.js'],
+  ['cross-section', '../subjects/cross-section.item.js']
 ]);
 
 /**

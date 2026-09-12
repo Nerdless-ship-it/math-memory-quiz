@@ -574,13 +574,139 @@ export function buildChoices(item, direction, pool, options)
 为什么必须统一：`percent.html` / `powers.html` 的开始按钮在**静态 HTML 里就是 enabled**，
 而点击监听要等 deferred module 执行完才挂上。两者之间存在一个「点了没反应」的窗口，
 外部（尤其自动化测试）只判断「按钮存在且未 disabled」就会点空，**且控制台没有任何报错**。
-实测该窗口造成过 12 轮里 5 次偶发失败，且能改前基线复现。
+实测该窗口造成过 12 轮里 5 次偶发失败，且能在改前基线上复现。
 
 因此：判定页面可交互请**以这个标记为准**（可配合 `disabled` 状态做二重保险）。
 
 ---
 
-## 7. UI 契约
+## 7. 图形题：图形题干 + 图形选项
+
+### 7.1 为什么要单独一个题型
+
+考公「图形推理」里的**正方体展开图折叠**与**截面图**是「图形题干 + 图形选项」，
+而现有 `'choice'` 题型的选项是**从其它条目的答案文本生成的**——图形选项无处安放。
+因此新增一个题型 `'figure-choice'`，**不改动**已被测试覆盖的 `'choice'` 通路。
+
+### 7.2 Item 扩展（可缺省，不影响任何既有科目）
+
+```js
+{
+  id, front, back, tags,          // 既有字段，保持不变
+  figure: {                       // 可选：题干图形
+    kind: 'cube-net' | 'cross-section' | 'custom',
+    spec: object                  // 交给 figure.js 渲染
+  },
+  choiceFigures: [                // 可选：图形选项（与 choices 一一对应）
+    { kind, spec } | null         // null 表示该项是纯文本
+  ],
+  choiceTexts: string[]           // 与 choiceFigures 等长的文字标签（可为 ''）
+}
+```
+
+**硬性约定**：
+
+1. `figure` 缺失时该条目退化为普通文字题，行为与今天完全一致。
+2. `choiceFigures` 与 `choiceTexts` 必须等长；`kind` 必须在 `figure.js` 的白名单里。
+3. **所有图形由代码计算生成**（内联 SVG），不得手写坐标、不得外链图片、
+   不得引入任何依赖——这是零依赖 + 静态托管约束的必然要求，也是几何正确性的唯一保证。
+4. 渲染产物必须携带 `role="img"` 与 `aria-label`（无障碍，且便于测试定位）。
+
+### 7.3 `figure.js` 契约（**spec 形状由本节锁定，两方不得各自发明**）
+
+```js
+export function renderFigure(figure, options)  // → SVGElement（内联 <svg>）
+export function figureAriaLabel(figure)        // → string
+export const FIGURE_KINDS                       // → Set<string> 白名单
+```
+
+支持的 `figure.kind` 与 `spec`：
+
+> **命名空间约定（重要）**：图形类型的取值一律带前缀，形如 `figure:<name>`。
+> 原因是科目 id 与图形类型会重名（例如都有 `cube-net`），若不区分，
+> 架构测试「渲染代码不得硬编码科目 id」会把图形类型名误判成硬编码的科目 id
+> ——那是**假阳性**，但放宽规则又会掩盖真问题。加前缀后两个命名空间互不干扰，
+> 规则可以保持严格。
+
+```js
+// ① 正方体展开图（题干用）
+{ kind: 'figure:cube-net', spec: { cells: [[col, row], ...] } }   // 恰好 6 格
+
+// ② 折叠后的立体图（选项用）
+{ kind: 'figure:cube-fold', spec: { visible: ['front', 'top', 'right'] } }
+//   visible 是「从观察方向能看到的三个面」的固定三元组，用于区分四个选项的朝向组合。
+//   渲染时三个可见面填不同灰阶，并在面内标注 前/上/右 以便辨认。
+//   ⚠️ 本期**不表达「面上有图案」**——图案朝向涉及折叠旋转矩阵，风险高、收益低。
+//      选项之间的几何差异靠「哪三个面可见」表达，这与真题的「相邻/相对关系」考法一致。
+
+// ③ 立方体截面（题干用：立体被一刀切）
+{ kind: 'figure:cross-section', spec: { planeNormal: [a, b, c], d: number } }
+
+// ④ 截面形状（选项用：只画截面本身，正视图）
+{ kind: 'figure:section-shape', spec: { planeNormal: [a, b, c], d: number } }
+
+// ⑤ 自定义（逃生口，仅用于确实无法参数化的图）
+{ kind: 'figure:custom', spec: { svg: '<svg …>…</svg>' } }
+```
+
+**渲染层硬约束**：
+
+1. 所有图形**由 geometry.js 计算后生成内联 SVG**；不得手写坐标、不得外链图片、不得引入依赖。
+2. 每个 `<svg>` 必须带 `role="img"` 与 `aria-label`（无障碍 + 便于测试定位）。
+3. 未知 `kind` **必须抛错**，不得静默渲染成空白——静默空白是图形题最危险的失败模式。
+4. 固定 `viewBox`，`width: 100%` + `max-width`，保证 390 / 891 / 1440 三档都不横向溢出。
+5. 只画可见棱（消隐），被遮挡的棱用虚线，避免学生误读结构。
+
+### 7.4 `geometry.js` 契约（纯函数，可单测；不得触碰 DOM）
+
+```js
+// 立方体截面：平面 ∩ 实心立方体 → 凸多边形顶点（3D），按极角排序
+export function cubeSection(planeNormal, d)          // → [[x,y,z], ...]
+export function sectionSideCount(planeNormal, d)     // → number
+export function sectionName(planeNormal, d)          // → '三角形' | '四边形' | '五边形' | '六边形' | null
+
+// 等距投影与消隐（供渲染层复用）
+export function project(point3d)                     // → { x, y }（屏幕坐标）
+export function cubeFaces()                          // → 每个面的顶点索引与法向
+
+// 正方体展开图：网格坐标 → 折叠后的六个面朝向
+// ⚠️ 参数一律是 `cells`（`[[col,row], ...]` 坐标数组本身），不要包一层 { cells }；
+//    figure.js 渲染前会取 figure.spec.cells 再传进来。
+export function foldNet(cells)                       // → 6 个面的朝向映射
+export function oppositePairs(cells)                 // → [[faceA, faceB], ...] 三组对面
+export function isAdjacentInNet(cells, a, b)         // → boolean
+export function relativeFaces(cells)                 // → 面之间的相对关系（供干扰项判定）
+export function isOppositeInCube(a, b)               // → boolean
+export function isValidNet(cells)                    // → boolean，是否合法展开图（11 种之一）
+export function validateNetOption(cells, option)     // → boolean，该立体图能否由该展开图折成
+```
+
+**已验证的几何事实（可作断言）**：
+
+- 立方体截面只可能是 **3～6 边**形；**不存在七边形**——这正是真题最常见的陷阱选项，
+  程序可自动生成。
+- 平面与立方体求交：逐条棱求交点、去重、按平面内极角排序即可稳定得到凸多边形。
+- **中空立方体（只有 12 条棱）的截面不属于本模型**：平面与「棱」相交得到的是离散点，
+  不是平面区域，无法用 `cubeSection` 生成。此类题目**本期不做**。
+
+### 7.5 判分与订正
+
+- 判分仍走 `adapter.isCorrect(item, ctx)`，**图形选项不改变判分语义**：选中项的文本标签参与比对。
+- 每个图形选项必须同时有 `choiceTexts` 文字标签（如 `A / B / C / D` 或形状名），
+  既用于判分，也用于**订正行的文字回显**——否则错题集里只剩一张图，无法复习。
+
+### 7.6 测试要求
+
+1. `geometry.test.mjs`：截面边数/形状名、七边形不可能性、展开图折叠的对面关系与
+   邻接关系、投影确定性。
+2. `figure.test.mjs`：白名单校验、未知 kind 必须抛错而不是静默空白、
+   SVG 必须带 `role="img"` 与 `aria-label`。
+3. 真实浏览器：图形题在 **390 / 891 / 1440** 三档宽度都不横向溢出
+   （891 = 用户实际窗口宽度，见 7.1 节相邻的中间宽度教训）。
+
+---
+
+## 8. UI 契约
 
 - 首页（`index.html`）：科目卡片**由注册表渲染**（不再手写卡片），
   分「速算」与「考公常识」两组；保留历史成绩与错题集区块及其 id。
@@ -629,7 +755,7 @@ export function buildChoices(item, direction, pool, options)
 
 ---
 
-## 8. 验收标准
+## 9. 验收标准
 
 **必须全绿（不可修改现有测试）**
 
@@ -671,7 +797,7 @@ npm run test:all-subjects    # 全部 10 个科目端到端 + 首页看板 + 响
 
 ---
 
-## 9. 禁止事项
+## 10. 禁止事项
 
 1. ❌ 修改 `test/` 下任何既有文件。
 2. ❌ 改 `js/data.js` / `js/powers-data.js` 的结构或数值。

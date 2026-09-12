@@ -27,6 +27,7 @@
 //   touchStreak()                                   打卡（可选）
 import { compareRecords, saveMistakes, saveTestResult } from './history.js';
 import { buildChoices, MIN_CHOICES, normalizeChoicesPerQuestion } from './distractors.js';
+import { renderFigure } from './figure.js';
 import { formatDuration, shuffle } from './quiz.js';
 
 /** 中途存档键（契约 3.5 冻结）。 */
@@ -394,8 +395,19 @@ export function createEngine(options = {}) {
     return Array.isArray(own) ? own : [];
   }
 
-  /** 为一道题生成选项；选项不足 2 个（含异常）时返回 null，由调用方降级为填空。 */
+  /**
+   * 为一道题生成选项；选项不足 2 个（含异常）时返回 null，由调用方降级为填空。
+   *
+   * 两种来源，按优先级：
+   *   1. **条目自带的选项**（`choiceTexts`）：图形题走这条。展开图/截面图的干扰项是
+   *      几何上算出来的，必须由题库作者给出，绝不能用文本干扰项生成器替代——
+   *      那会产出「一张图 vs 四个文字」这种荒谬的题。
+   *   2. 兜底：`buildChoices` 从同科目同维度的其它条目抽文本干扰项（既有常识科走这条）。
+   */
   function buildChoiceSet(question, pool) {
+    const authored = attempt(() => authoredChoiceSet(question));
+    if (authored) return authored;
+
     const built = attempt(() => buildChoices(question, question.direction, pool ?? choiceCandidatePool(), {
       choicesPerQuestion,
       random
@@ -404,6 +416,29 @@ export function createEngine(options = {}) {
     if (built.choices.length < MIN_CHOICES) return null;
     if (!Number.isInteger(built.answerIndex) || built.answerIndex < 0) return null;
     return { choices: built.choices, answerIndex: built.answerIndex };
+  }
+
+  /**
+   * 条目自带选项：`choiceTexts` 是选项文字（判分与订正都用它），
+   * `choiceFigures` 与之等长，用于渲染图形选项。
+   *
+   * 正确项通过 `back` 与 `choiceTexts` 比对确定；比对不中时返回 null 交由兜底逻辑处理，
+   * 而不是猜一个下标——猜错会让学生即使选对也被判错。
+   */
+  function authoredChoiceSet(question) {
+    const texts = question?.choiceTexts;
+    if (!Array.isArray(texts) || texts.length < MIN_CHOICES) return null;
+    const normalized = texts.map((text) => String(text ?? '').trim());
+    if (normalized.some((text) => text === '')) return null;
+    const answerText = String(question.back ?? '').trim();
+    const answerIndex = normalized.indexOf(answerText);
+    if (answerIndex < 0) return null;
+
+    const figures = Array.isArray(question.choiceFigures) ? question.choiceFigures : [];
+    // 图形数量不匹配时整体放弃自带选项，避免出现「有的选项有图、有的没有」的错位。
+    if (figures.length > 0 && figures.length !== normalized.length) return null;
+
+    return { choices: normalized, answerIndex };
   }
 
   /** 本轮每道题的题型：同时声明两种时按 choiceRatio 随机，只声明一种时就用那一种。 */
@@ -566,11 +601,30 @@ export function createEngine(options = {}) {
 
     const choices = question.choices ?? [];
     const answer = String(question.answer ?? '').trim();
+    const figures = Array.isArray(question.choiceFigures) ? question.choiceFigures : [];
     let selectedOption = null;
     choices.forEach((choice, index) => {
       const option = doc.createElement('button');
       option.type = 'button';
       option.className = 'choice-option';
+      // 带图形的选项改成上下结构：图形在上、文字标签在下，纵向排列更好比对图形。
+      const figure = figures[index];
+      if (figure) {
+        option.classList.add('choice-option--figure');
+        try {
+          const node = renderFigure(figure);
+          node.classList.add('choice-option-figure');
+          option.append(node);
+        } catch (error) {
+          // 图形渲染失败绝不留空白：降级为文字标签 + 一处可定位的错误标记，
+          // 这样数据错误会立刻暴露，而不是变成一道没有图的图形题。
+          const broken = doc.createElement('span');
+          broken.className = 'choice-option-figure-broken';
+          broken.textContent = '图形错误';
+          if (broken.dataset) broken.dataset.figureError = String(error?.message ?? error);
+          option.append(broken);
+        }
+      }
       if (option.dataset) option.dataset.choiceIndex = String(index);
       if (typeof option.setAttribute === 'function') {
         option.setAttribute('data-choice-index', String(index));
@@ -588,6 +642,12 @@ export function createEngine(options = {}) {
       const label = doc.createElement('span');
       label.className = 'choice-option-text';
       label.textContent = choice;
+      // 图形选项且正文就是那个字母标号时（题库用 'A'/'B'/'C'/'D' 当判分标签），
+      // 会渲染出「A ... A」两遍。此时隐藏重复的正文，只留标号。
+      if (figure && label.textContent.trim() === marker.textContent) {
+        label.className += ' choice-option-text--duplicate';
+        if (label.setAttribute) label.setAttribute('aria-hidden', 'true');
+      }
       option.append(marker, label);
       choiceContainer.append(option);
     });
@@ -616,6 +676,18 @@ export function createEngine(options = {}) {
     setText(elements.questionInstruction, isChoice ? toChoiceInstruction(view.instruction) : view.instruction);
     setText(elements.promptValue, prompt.text);
     if (elements.promptValue && prompt.html) elements.promptValue.innerHTML = prompt.html;
+    // 题干图形：适配器通过 renderPrompt 返回 { node } 时插到题面下方。
+    // 图形题（figure-choice）走这条；文字题不返回 node，DOM 一个节点都不多。
+    if (elements.promptValue) {
+      const existing = elements.promptValue.parentElement?.querySelector?.('.prompt-figure');
+      if (existing) existing.remove();
+      if (prompt.node) {
+        const holder = doc.createElement('div');
+        holder.className = 'prompt-figure';
+        holder.append(prompt.node);
+        elements.promptValue.after(holder);
+      }
+    }
     // 长题面缩字号：只在选择题里生效，且必须在题面写入之后调用（要按实际文本算长度）。
     // 填空题（percent / powers）不调用，其题面样式与字号一字不变。
     if (isChoice) {

@@ -3,11 +3,15 @@
 // 关联维度（三个维度各自承担不同的 front/back，互不重复）：
 //   元素名称 → 元素符号   front='氢'          back='H'
 //   元素名称 → 原子序数   front='氢的原子序数' back='1'
-//   符号释义 → 元素名称   front='H'          back='氢'        ← 必须反向出题
+//   符号释义 → 元素名称   front='H'          back='氢'
 //
-// 关于方向锁：第三个维度是「反向」的（提示是符号，作答是元素名）。
-// registry.js 的 DIMENSION_LOCKS 已把 `huaxue:符号释义` 锁为 backward，
-// 否则会出现「H → ？」这种无解题。详见 docs/ARCHITECTURE.md 与 registry.js。
+// 关于方向锁（registry.js 的 DIMENSION_LOCKS）：元素名称与符号释义是同一配对
+// （名称 ↔ 符号）的两组数据，两个维度**都锁为 backward**，出题互为镜像、各问一次：
+//   符号释义（反向）：提示元素名（back），选元素符号（front）；
+//   元素名称（反向）：提示元素符号（back），选元素名（front）。
+// 若元素名称保持双向自由，其正向题「氢 → 选 H」会与符号释义的反向题逐字重复
+// （200 轮实测每轮平均 20+ 道重复题）。原子序数维度无锁：反向槽位被占满后，
+// 它实际全部正向出题（「氢的原子序数」→ 选数字），不会出现别扭的反向形式。
 //
 // 关于元素符号大小写：符号严格按 IUPAC 规范书写（首字母大写、第二字母小写），
 // 如 Cl / Na / Mg / Mn / Hg。判题时 adapters/generic.js 的 normalizeText 会
@@ -90,5 +94,20 @@ export const ITEMS = Object.freeze([
   { id: 'huaxue-69', front: 'Zn', back: '锌', tags: ['符号释义'] },
   { id: 'huaxue-70', front: 'Ag', back: '银', tags: ['符号释义'] },
   { id: 'huaxue-71', front: 'I', back: '碘', tags: ['符号释义'] },
-  { id: 'huaxue-72', front: 'Hg', back: '汞', tags: ['符号释义'] }
+  { id: 'huaxue-72', front: 'Hg', back: '汞', tags: ['符号释义'] },
+
+  // ── 2026-09 内容补充：金 / 铅 / 锡 / 锰（考公常见金属；id 只增不改，追加在尾）
+  { id: 'huaxue-73', front: '金', back: 'Au', tags: ['元素名称'] },
+  { id: 'huaxue-74', front: '铅', back: 'Pb', tags: ['元素名称'] },
+  { id: 'huaxue-75', front: '锡', back: 'Sn', tags: ['元素名称'] },
+  { id: 'huaxue-76', front: '锰', back: 'Mn', tags: ['元素名称'] },
+  { id: 'huaxue-77', front: 'Au', back: '金', tags: ['符号释义'] },
+  { id: 'huaxue-78', front: 'Pb', back: '铅', tags: ['符号释义'] },
+  { id: 'huaxue-79', front: 'Sn', back: '锡', tags: ['符号释义'] },
+  { id: 'huaxue-80', front: 'Mn', back: '锰', tags: ['符号释义'] },
+
+  // ── 2026-09 内容补充：铁 26 / 铜 29 / 锌 30（考公高频原子序数）──────
+  { id: 'huaxue-81', front: '铁的原子序数', back: '26', tags: ['原子序数'] },
+  { id: 'huaxue-82', front: '铜的原子序数', back: '29', tags: ['原子序数'] },
+  { id: 'huaxue-83', front: '锌的原子序数', back: '30', tags: ['原子序数'] }
 ]);

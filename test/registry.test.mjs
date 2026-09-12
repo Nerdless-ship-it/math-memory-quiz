@@ -20,7 +20,9 @@ const REQUIRED_FIELDS = Object.freeze([
 ]);
 
 const QUESTION_TYPES = Object.freeze(['fill', 'choice']);
-const MODELS = Object.freeze(['assoc']);
+// 'assoc'  = 双向关联模型（文字配对，常识科与速算科）
+// 'figure' = 图形题模型（题面与选项都是图，走 figure-choice 适配器）
+const MODELS = Object.freeze(['assoc', 'figure']);
 const ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
