@@ -899,3 +899,343 @@ test('默认持久化端口：percent 端到端仍写 v1 兼容键，且空题�
   assert.equal(empty.elements.welcome.hidden, false);
   assert.equal(empty.elements.quiz.hidden, true);
 });
+
+// ══════════════════════════════════════════════════════════════════════
+// 选择题模式（task-4 / 契约第 5 节）
+//
+// 这一节用一套更完整的 DOM 替身：选择题要往 #choice-list 里 createElement + append，
+// 还要读 dataset.choiceIndex 识别点中的是哪一项，因此替身必须带 dataset /
+// setAttribute / parentElement（真实 DOM 天然具备，上面的极简替身没有）。
+// ══════════════════════════════════════════════════════════════════════
+
+/** 带 dataset / 属性 / 父子关系的元素替身。 */
+function createChoiceElement() {
+  const element = createStubElement();
+  element.dataset = {};
+  element.attributes = {};
+  element.setAttribute = (name, value) => { element.attributes[name] = String(value); };
+  element.getAttribute = (name) => (
+    Object.prototype.hasOwnProperty.call(element.attributes, name) ? element.attributes[name] : null
+  );
+  element.parentElement = null;
+  const baseAppend = element.append;
+  element.append = (...nodes) => {
+    baseAppend(...nodes);
+    for (const node of nodes) if (node && typeof node === 'object') node.parentElement = element;
+  };
+  const baseReplace = element.replaceChildren;
+  element.replaceChildren = (...nodes) => {
+    for (const node of element.children) if (node && typeof node === 'object') node.parentElement = null;
+    baseReplace(...nodes);
+    for (const node of nodes) if (node && typeof node === 'object') node.parentElement = element;
+  };
+  return element;
+}
+
+function createChoiceDom() {
+  const elements = {};
+  for (const key of Object.keys(ELEMENT_IDS)) elements[key] = createChoiceElement();
+  elements.quiz.hidden = true;
+  elements.result.hidden = true;
+  elements.testMeta.hidden = true;
+  const document = createChoiceElement();
+  document.visibilityState = 'visible';
+  document.createElement = () => createChoiceElement();
+  return { elements, document };
+}
+
+/** 造一个 N 条的演示题库（front = 词N，back = 数N，同一 tags）。 */
+function makeDemoItems(count) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `item-${index}`,
+    front: `词${index}`,
+    back: `数${index}`,
+    tags: ['批量'],
+    raw: { front: `词${index}`, back: `数${index}` }
+  }));
+}
+
+/** 与 demoAdapter 同构、但题库可换的适配器。 */
+function adapterOf(items) {
+  return { ...demoAdapter, items: () => items };
+}
+
+function choiceEngine(overrides = {}) {
+  const dom = overrides.dom ?? createChoiceDom();
+  const storage = overrides.storage ?? createFakeStorage();
+  const window = createStubWindow();
+  let clock = 1_000_000;
+  const calls = [];
+  const adapter = overrides.adapter ?? demoAdapter;
+  const questionTypes = overrides.questionTypes ?? ['fill', 'choice'];
+  const elements = overrides.elements ?? dom.elements;
+  const engine = createEngine({
+    adapter,
+    subject: { id: overrides.subjectId ?? 'demo', questionTypes },
+    elements,
+    document: dom.document,
+    window,
+    storage,
+    mode: overrides.mode,
+    questionTypes,
+    choiceRatio: overrides.choiceRatio ?? 1,
+    choicesPerQuestion: overrides.choicesPerQuestion ?? 4,
+    random: seededRandom(overrides.seed ?? 3),
+    now: () => clock,
+    store: overrides.store ?? {
+      saveResult: (subjectId, metrics) => {
+        calls.push({ name: 'saveResult', subjectId, metrics });
+        return { record: { id: 'record-choice', ...metrics }, previous: null };
+      },
+      compare: () => null,
+      saveMistakes: (subjectId, mistakes) => {
+        calls.push({ name: 'saveMistakes', subjectId, mistakes });
+        return mistakes;
+      },
+      readSession: () => JSON.parse(storage.getItem(SESSION_KEY) ?? 'null'),
+      saveSession: (session) => storage.setItem(SESSION_KEY, JSON.stringify(session)),
+      clearSession: () => storage.removeItem(SESSION_KEY),
+      recordOutcomes: (subjectId, outcomes) => calls.push({ name: 'recordOutcomes', subjectId, outcomes }),
+      touchStreak: () => calls.push({ name: 'touchStreak' })
+    }
+  });
+  return {
+    engine,
+    elements: dom.elements,
+    document: dom.document,
+    window,
+    storage,
+    calls,
+    adapter,
+    tick: (milliseconds) => { clock += milliseconds; }
+  };
+}
+
+/** 选项文案（不含字母标号那一层）。 */
+function optionTexts(choices) {
+  return choices.children.map((option) => option.children[1]?.textContent ?? '');
+}
+
+/** 在选项上派发一次点击（真实页面里事件从按钮冒泡到容器）。 */
+function clickOption(choices, index) {
+  const option = choices.children[index];
+  assert.ok(option, `第 ${index} 个选项不存在（共 ${choices.children.length} 个）`);
+  choices.emit('click', { target: option });
+  return option;
+}
+
+test('createEngine：choice 题型点选项即作答、正确判分、走完可交卷', () => {
+  const context = choiceEngine({ seed: 21 });
+  const { engine, elements } = context;
+  engine.start();
+
+  assert.equal(engine.getState().total, 4);
+  assert.equal(engine.getState().choiceEnabled, true, '页面有选项容器且科目声明 choice');
+  assert.ok(engine.getState().questions.every((question) => question.type === 'choice'),
+    'choiceRatio = 1 时全部题目都应是选择题');
+  assert.equal(engine.getState().questions[0].choiceCount, 4);
+
+  // 选择题渲染：选项区可见、输入框与等号收起、题面切单列。
+  assert.equal(elements.choiceBlock.hidden, false);
+  assert.equal(elements.choices.children.length, 4);
+  assert.equal(elements.choices.children[0].className, 'choice-option');
+  assert.equal(elements.choices.children[0].dataset.choiceIndex, '0');
+  assert.equal(elements.choices.children[3].dataset.choiceIndex, '3');
+  assert.equal(elements.choices.children[0].children[0].textContent, 'A');
+  assert.equal(elements.answerInput.disabled, true, '选择题不该还能打字');
+  assert.equal(elements.answerWrap.hidden, true);
+  assert.equal(elements.equationOperator.hidden, true);
+  assert.equal(elements.equation.classList.contains('choice-equation'), true);
+  assert.equal(elements.nextButton.disabled, true, '未选选项时下一题必须禁用');
+  assert.equal(elements.sidebarTip.textContent, '点击选项作答，选中后点「下一题」继续。',
+    '选择题的侧栏提示不得再让用户「输入答案后按回车」');
+
+  const total = engine.getState().total;
+  const picks = [];
+  for (let index = 0; index < total; index += 1) {
+    const question = engine.getState().questions[index];
+    const texts = optionTexts(elements.choices);
+    assert.equal(texts.length, 4);
+    assert.equal(new Set(texts).size, 4, '选项不得重复');
+    const item = DEMO_ITEMS.find((candidate) => candidate.id === question.id);
+    const expected = question.direction === 'forward' ? item.back : item.front;
+    const prompt = question.direction === 'forward' ? item.front : item.back;
+    assert.ok(!texts.includes(prompt), `选项里不得出现题面：${prompt}`);
+
+    // 第 0 题故意选错，其余选对：验证判分走的是适配器，而不是「点了就算对」。
+    const correctIndex = texts.indexOf(expected);
+    const pickIndex = index === 0 ? (correctIndex + 1) % texts.length : correctIndex;
+    picks.push(texts[pickIndex]);
+    if (index === total - 1) assert.equal(elements.nextButtonText.textContent, '交卷');
+    clickOption(elements.choices, pickIndex);
+
+    assert.equal(elements.nextButton.disabled, false, '选中后必须解开下一题');
+    assert.equal(engine.getState().questions[index].answer, texts[pickIndex]);
+    // 重渲染后选中项必须带 is-selected（用户能看到自己选了什么）。
+    assert.equal(elements.choices.children[pickIndex].classList.contains('is-selected'), true);
+
+    // 切题时引擎会同步一次输入框：选择题必须无视它，否则已选答案会被清空。
+    elements.answerInput.value = 'zzz';
+    elements.nextButton.emit('click');
+    assert.equal(engine.getState().questions[index].answer, texts[pickIndex],
+      '输入框内容不得覆盖已选选项');
+  }
+
+  assert.equal(elements.result.hidden, false);
+  assert.equal(elements.scoreValue.textContent, '75');
+  assert.equal(elements.accuracyValue.textContent, '75%');
+  assert.equal(elements.correctValue.textContent, '3 / 4');
+  assert.equal(elements.correctionTitle.textContent, '错题回顾 · 1 题');
+  assert.equal(elements.correctionList.children.length, 1);
+  assert.equal(elements.correctionList.children[0].children[2].children[1].textContent, picks[0],
+    '订正行里的「你的答案」应显示用户选中的那个选项');
+  assert.equal(context.calls.find((call) => call.name === 'saveMistakes').mistakes.length, 1);
+  assert.equal(context.calls.find((call) => call.name === 'recordOutcomes').outcomes.length, 4);
+  assert.equal(engine.getState().session, false, '交卷后存档必须清空');
+});
+
+test('createEngine：选项容器缺失（percent / powers 那种页面）时题目降级为填空', () => {
+  const dom = createStubDom();
+  dom.elements.choices = null;
+  dom.elements.choiceBlock = null;
+  const context = choiceEngine({
+    dom,
+    elements: dom.elements,
+    questionTypes: ['fill', 'choice'],
+    choiceRatio: 1,
+    seed: 22
+  });
+  const { engine, elements } = context;
+
+  assert.equal(engine.getState().choiceEnabled, false, '缺少选项容器时选择题必须整体关闭');
+  engine.start();
+  assert.equal(engine.getState().total, 4);
+  assert.ok(engine.getState().questions.every((question) => question.type === 'fill'),
+    '没有选项容器时不得出选择题');
+  assert.ok(engine.getState().questions.every((question) => question.choiceCount === 0));
+
+  // 走的是填空路径：输入框可用、答案从输入框读取。
+  assert.equal(elements.answerInput.disabled, false);
+  assert.equal(elements.answerInput.hidden, false);
+  // 没有选项容器时不碰侧栏（percent / powers 的 DOM 一个字都不改）。
+  assert.notEqual(elements.sidebarTip.textContent, '点击选项作答，选中后点「下一题」继续。',
+    '缺容器时不得把侧栏提示改成选择题文案');
+  const expected = expectedInput(demoQuestion(engine));
+  elements.answerInput.value = expected;
+  elements.answerInput.emit('input');
+  assert.equal(elements.nextButton.disabled, false);
+  elements.nextButton.emit('click');
+  assert.equal(engine.getState().currentIndex, 1, '降级后的填空必须能正常推进');
+  assert.equal(engine.getState().questions[0].answer, expected);
+});
+
+test('createEngine：选项凑不齐 2 个时该题退回填空（不出只有一个选项的题）', () => {
+  const solo = [{ id: 'only', front: '唯一', back: '答案', tags: ['单'], raw: { front: '唯一', back: '答案' } }];
+  const context = choiceEngine({ adapter: adapterOf(solo), seed: 23 });
+  const { engine, elements } = context;
+
+  engine.start();
+  assert.equal(engine.getState().total, 1);
+  assert.equal(engine.getState().questions[0].type, 'fill', '池子只有 1 条时必须降级为填空');
+  assert.equal(engine.getState().questions[0].choiceCount, 0);
+  assert.equal(elements.choices.children.length, 0);
+  assert.equal(elements.choiceBlock.hidden, true);
+  assert.equal(elements.answerInput.disabled, false);
+});
+
+test('createEngine：存档恢复后题型与已选选项都还在，且选项顺序不变', () => {
+  const storage = createFakeStorage();
+  const first = choiceEngine({ storage, seed: 24 });
+  first.engine.start();
+  assert.equal(first.engine.getState().total, 4);
+
+  const optionTextsBefore = optionTexts(first.elements.choices);
+  assert.equal(optionTextsBefore.length, 4);
+  // 第 0 题选中第 2 个选项，然后进入第 1 题（切题时才落盘）。
+  const picked = optionTextsBefore[1];
+  clickOption(first.elements.choices, 1);
+  first.elements.nextButton.emit('click');
+  assert.equal(first.engine.getState().currentIndex, 1);
+
+  const session = JSON.parse(storage.getItem(SESSION_KEY));
+  assert.equal(session.types[0], 'choice', '存档必须记下每题的题型');
+  assert.equal(session.types.length, 4);
+  assert.equal(session.answers[0], picked, '存档必须记下已选选项');
+  assert.deepEqual(session.choices[0], optionTextsBefore, '存档必须记下选项，刷新后顺序不变');
+
+  // 新引擎（模拟刷新页面）+ 同一份存档 → 恢复。
+  const second = choiceEngine({ storage, seed: 999 });
+  assert.equal(second.engine.hasSession(), true);
+  second.engine.resume();
+  const state = second.engine.getState();
+  assert.equal(state.total, 4);
+  assert.equal(state.currentIndex, 1);
+  assert.equal(state.questions[0].type, 'choice', '恢复后题型必须还是选择题');
+  assert.equal(state.questions[1].type, 'choice');
+  assert.equal(state.questions[0].answer, picked, '恢复后已选选项必须还在');
+  assert.deepEqual(state.questions.map((question) => question.direction),
+    first.engine.getState().questions.map((question) => question.direction));
+  // 恢复后落在第 1 题：它的选项必须与存档里第 1 题完全一致（顺序也不变）。
+  assert.deepEqual(optionTexts(second.elements.choices), session.choices[1],
+    '恢复后当前题的选项应与存档一致（顺序也不变）');
+  // 回退到第 0 题：选项仍应一致，且已选项必须保持高亮（答案没丢）。
+  second.elements.previousButton.emit('click');
+  assert.equal(second.engine.getState().currentIndex, 0);
+  assert.deepEqual(optionTexts(second.elements.choices), optionTextsBefore,
+    '恢复后回退到已作答的题，选项应与当时一致');
+  assert.equal(second.elements.choices.children[1].classList.contains('is-selected'), true,
+    '恢复后已选中的选项必须仍然高亮');
+
+  // 老存档（没有 types / choices 两个新增字段）也必须能恢复：只重排题型，不丢答案。
+  const legacy = JSON.parse(storage.getItem(SESSION_KEY));
+  delete legacy.types;
+  delete legacy.choices;
+  legacy.currentIndex = 2;
+  storage.setItem(SESSION_KEY, JSON.stringify(legacy));
+  const third = choiceEngine({ storage, seed: 25 });
+  assert.equal(third.engine.hasSession(), true);
+  third.engine.resume();
+  const legacyState = third.engine.getState();
+  assert.equal(legacyState.total, 4);
+  assert.equal(legacyState.currentIndex, 2, '老存档必须按存档里的进度恢复');
+  assert.equal(legacyState.questions[0].answer, picked, '缺字段的老存档不得丢答案');
+  assert.ok(['fill', 'choice'].includes(legacyState.questions[2].type));
+  // 题型与选项 DOM 必须自洽：选择题 4 个选项，填空 0 个。
+  assert.equal(third.elements.choices.children.length,
+    legacyState.questions[2].type === 'choice' ? 4 : 0,
+    '恢复后选项 DOM 必须与该题的题型一致');
+});
+
+test('createEngine：choiceRatio 控制题型混合比例（0 = 全填空，1 = 全选择）', () => {
+  const allFill = choiceEngine({ questionTypes: ['fill', 'choice'], choiceRatio: 0, seed: 31 });
+  allFill.engine.start();
+  assert.ok(allFill.engine.getState().questions.every((question) => question.type === 'fill'));
+  assert.equal(allFill.elements.choices.children.length, 0, '填空题不得残留选项 DOM');
+  assert.equal(allFill.elements.choiceBlock.hidden, true);
+
+  const allChoice = choiceEngine({ questionTypes: ['fill', 'choice'], choiceRatio: 1, seed: 31 });
+  allChoice.engine.start();
+  assert.ok(allChoice.engine.getState().questions.every((question) => question.type === 'choice'));
+
+  // 默认 0.5：大题库下两种题型都出现，且都不缺席。
+  const mixed = choiceEngine({
+    adapter: adapterOf(makeDemoItems(30)),
+    questionTypes: ['fill', 'choice'],
+    choiceRatio: 0.5,
+    seed: 32
+  });
+  mixed.engine.start();
+  const types = mixed.engine.getState().questions.map((question) => question.type);
+  const choiceCount = types.filter((type) => type === 'choice').length;
+  assert.equal(types.length, 30);
+  assert.ok(choiceCount > 0 && choiceCount < 30, `默认比例应混合两种题型，实际选择题 ${choiceCount}/30`);
+
+  // 科目只声明 fill（percent / powers）时，即使页面有选项容器也绝不出选择题。
+  const fillOnly = choiceEngine({ questionTypes: ['fill'], choiceRatio: 1, seed: 33 });
+  fillOnly.engine.start();
+  assert.ok(fillOnly.engine.getState().questions.every((question) => question.type === 'fill'),
+    'questionTypes 不含 choice 时必须全是填空');
+  assert.equal(fillOnly.elements.choices.children.length, 0);
+  assert.equal(fillOnly.elements.answerInput.disabled, false);
+});
+

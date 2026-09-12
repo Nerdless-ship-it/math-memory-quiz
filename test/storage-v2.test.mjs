@@ -315,6 +315,56 @@ test('非空 v2 错题仍然优先，移除过的错题不会从 v1 镜像复活
   assert.equal(result[0].itemId, '16.7');
 });
 
+test('session 必须是严格白名单：题型与选项不得被静默丢字段', () => {
+  // ⚠️ 回归测试。normalizeSession 是白名单实现，没列进去的字段会被静默丢弃。
+  // 选择题模式新增 types / choices 时如果忘了加进白名单，存档「写入成功、读回成功」，
+  // 但题型与选项全部消失——刷新后选择题退化成填空题且选项丢失，且不报任何错。
+  const storage = createStorage();
+  const saved = saveSession({
+    subjectId: 'chaodai',
+    mode: 'test',
+    questionTypes: ['fill', 'choice'],
+    questionIds: ['chaodai-01', 'chaodai-02'],
+    directions: ['forward', 'forward'],
+    answers: ['禹', ''],
+    types: ['choice', 'fill'],
+    choices: [['禹', '汤', '周武王姬发'], []],
+    currentIndex: 1,
+    startedAt: 111,
+    savedAt: 222
+  }, storage);
+
+  assert.deepEqual(saved.types, ['choice', 'fill'], '题型必须保留');
+  assert.deepEqual(saved.choices, [['禹', '汤', '周武王姬发'], []], '选项必须保留');
+  assert.deepEqual(readSession(storage).types, ['choice', 'fill'], '读回后题型仍在');
+  assert.deepEqual(readSession(storage).choices[0], ['禹', '汤', '周武王姬发'], '读回后选项仍在');
+
+  // 老存档（没有这两个字段）必须仍然合法，且长度与题量对齐——引擎靠「长度对得上且值合法」判断能否采信。
+  const legacy = saveSession({
+    subjectId: 'percent',
+    questionIds: ['12.5', '3.5'],
+    directions: ['forward', 'backward'],
+    answers: ['8', ''],
+    currentIndex: 0
+  }, storage);
+  assert.equal(legacy.types.length, 2, '缺失时也要给出与题量等长的数组');
+  assert.deepEqual(legacy.types, ['', ''], '缺失的题型用空串表示「未分配」，不能伪造成 fill');
+  assert.deepEqual(legacy.choices, [[], []]);
+
+  // 非法题型值必须被过滤成空串，不能让引擎误判存档完整。
+  const bogus = saveSession({
+    subjectId: 'percent',
+    questionIds: ['12.5'],
+    directions: ['forward'],
+    answers: ['8'],
+    types: ['nonsense'],
+    choices: ['not-an-array'],
+    currentIndex: 0
+  }, storage);
+  assert.deepEqual(bogus.types, [''], '非法题型值应归一化为空串');
+  assert.deepEqual(bogus.choices, [[]], '非数组选项应归一化为空数组');
+});
+
 test('成绩记录是单一数组：两个科目共处一数组且按 completedAt 升序', () => {
   const storage = createStorage();
   saveRecord({ id: 'p1', subjectId: 'percent', completedAt: 100, accuracy: 90, correct: 27, total: 30, durationMs: 80_000 }, storage);

@@ -26,10 +26,18 @@
 //   recordOutcomes(subjectId, outcomes, { mode })   掌握度（可选，storage.js 接入点）
 //   touchStreak()                                   打卡（可选）
 import { compareRecords, saveMistakes, saveTestResult } from './history.js';
+import { buildChoices, MIN_CHOICES, normalizeChoicesPerQuestion } from './distractors.js';
 import { formatDuration, shuffle } from './quiz.js';
 
 /** 中途存档键（契约 3.5 冻结）。 */
 export const SESSION_KEY = 'mq:session:v2';
+
+/** 默认的选择题占比（科目同时声明 fill 与 choice 时，每题按此比例随机选题型）。 */
+export const DEFAULT_CHOICE_RATIO = 0.5;
+
+/** 课本题型取值（契约 3.1 的 questionTypes）。 */
+export const FILL = 'fill';
+export const CHOICE = 'choice';
 
 /** 契约第 4 节要求的元素句柄：id 选择器 → options.elements 的键。 */
 export const ELEMENT_IDS = Object.freeze({
@@ -62,12 +70,25 @@ export const ELEMENT_IDS = Object.freeze({
   timeComparison: '#time-comparison',
   correctionTitle: '#correction-title',
   correctionList: '#correction-list',
+  // 选择题（契约第 5 节）：只有通用科目页 quiz.html 有这两个节点。
+  // percent.html / powers.html 没有，因此 collectElements 会给出 null，
+  // 引擎必须容忍缺失并把题目降级为填空——这两个页面的交互要逐字不变。
+  choices: '#choice-list',
+  choiceBlock: '#choice-block',
+  // 题面容器：选择题时用它切到单列布局（把「= 输入框」那一列收掉）。
+  equation: '#equation',
+  // 侧栏提示：只有通用页有，且只在选择题时改写文案（填空恢复原文）。
+  sidebarTip: '#sidebar-tip',
   // 可选元素：页面没有时引擎自动跳过。
   answerWrap: '.answer-wrap',
   fractionNumerator: '#fraction-numerator',
   equationOperator: '#equation-operator',
   topicLabel: '#topic-label'
 });
+
+/** 侧栏提示的默认文案（与 quiz.html 的静态文本一致，填空时用）。 */
+const FILL_SIDEBAR_TIP = '输入答案后按回车，可直接进入下一题。';
+const CHOICE_SIDEBAR_TIP = '点击选项作答，选中后点「下一题」继续。';
 
 /** 按 ELEMENT_IDS 批量取 DOM 句柄；缺失的元素为 null（引擎容忍缺失）。 */
 export function collectElements(root = globalThis.document) {
@@ -287,6 +308,24 @@ export function createEngine(options = {}) {
   const storage = pickStorage(options.storage);
   const store = { ...createDefaultStore(storage), ...(options.store ?? {}) };
 
+  // ── 选择题开关（契约第 5 节 + task-4）───────────────────────────────
+  // 三个条件同时成立才会出选择题：
+  //   1. 科目声明了 'choice'；
+  //   2. 页面有选项容器（#choice-list）——percent.html / powers.html 没有；
+  //   3. 有可用的 document.createElement（渲染选项按钮）。
+  // 任何一条不满足都整体退化为填空：绝不抛错、绝不白屏。
+  const choiceContainer = elements.choices ?? null;
+  const choiceBlock = elements.choiceBlock ?? choiceContainer;
+  const canRenderChoices = Boolean(choiceContainer)
+    && Boolean(doc && typeof doc.createElement === 'function');
+  const wantsChoice = questionTypes.includes(CHOICE);
+  const wantsFill = questionTypes.includes(FILL) || !wantsChoice;
+  const choiceRatio = normalizeRatio(options.choiceRatio);
+  const choicesPerQuestion = normalizeChoicesPerQuestion(options.choicesPerQuestion);
+  // 干扰项的「更大范围」池子：默认就是 adapter.items()；
+  // 错题重练时调用方应传全库，避免只有 2 条错题导致选项凑不齐。
+  const choicePoolOption = options.choicePool;
+
   let questions = [];
   let currentIndex = 0;
   let startedAt = 0;
@@ -302,6 +341,91 @@ export function createEngine(options = {}) {
     } catch {
       return undefined;
     }
+  }
+
+  /** 选择题占比：0 = 全填空，1 = 全选择，越界或非法值回退默认。 */
+  function normalizeRatio(value) {
+    if (value === null || value === undefined || value === '') return DEFAULT_CHOICE_RATIO;
+    const number = Number(value);
+    if (!Number.isFinite(number)) return DEFAULT_CHOICE_RATIO;
+    return Math.min(1, Math.max(0, number));
+  }
+
+  /** 干扰项候选池：优先用调用方给的全库，拿不到才退回 adapter.items()。 */
+  function choiceCandidatePool() {
+    const source = typeof choicePoolOption === 'function' ? attempt(() => choicePoolOption()) : choicePoolOption;
+    if (Array.isArray(source) && source.length > 0) return source;
+    const own = attempt(() => adapter.items());
+    return Array.isArray(own) ? own : [];
+  }
+
+  /** 为一道题生成选项；选项不足 2 个（含异常）时返回 null，由调用方降级为填空。 */
+  function buildChoiceSet(question, pool) {
+    const built = attempt(() => buildChoices(question, question.direction, pool ?? choiceCandidatePool(), {
+      choicesPerQuestion,
+      random
+    }));
+    if (!built || !Array.isArray(built.choices)) return null;
+    if (built.choices.length < MIN_CHOICES) return null;
+    if (!Number.isInteger(built.answerIndex) || built.answerIndex < 0) return null;
+    return { choices: built.choices, answerIndex: built.answerIndex };
+  }
+
+  /** 本轮每道题的题型：同时声明两种时按 choiceRatio 随机，只声明一种时就用那一种。 */
+  function pickQuestionType() {
+    // 科目没声明 choice（percent / powers）一律填空——这一条是冻结 e2e 的命门。
+    if (!canRenderChoices || !wantsChoice) return FILL;
+    if (!wantsFill) return CHOICE;
+    return random() < choiceRatio ? CHOICE : FILL;
+  }
+
+  /**
+   * 为一轮题目分配题型与选项。
+   * 选题型失败（干扰项凑不齐）的题会退回填空——这比出一道只有一个选项的题好。
+   */
+  function assignTypes(list) {
+    const pool = canRenderChoices ? choiceCandidatePool() : [];
+    for (const question of list) {
+      const type = pickQuestionType();
+      question.type = type;
+      question.choices = [];
+      question.answerIndex = -1;
+      if (type !== CHOICE) continue;
+      const built = buildChoiceSet(question, pool);
+      if (built) {
+        question.choices = built.choices;
+        question.answerIndex = built.answerIndex;
+      } else {
+        question.type = FILL;
+      }
+    }
+  }
+
+  /**
+   * 取当前题的有效题型，并就地修复缺失的选项。
+   *
+   * 为什么需要「修复」：选项是随机的，不落进 storage.js 的 normalizeSession 契约里，
+   * 存档若被 storage.js 归一化过（它只保留契约字段），choices 会丢，type 还在。
+   * 此时按题重建选项，而不是把题目变成无法作答的空白。
+   */
+  function questionTypeOf(question) {
+    if (!question) return FILL;
+    if (question.type !== CHOICE || !canRenderChoices) {
+      question.type = FILL;
+      return FILL;
+    }
+    if (!Array.isArray(question.choices) || question.choices.length < MIN_CHOICES) {
+      const built = buildChoiceSet(question);
+      if (!built) {
+        question.type = FILL;
+        question.choices = [];
+        question.answerIndex = -1;
+        return FILL;
+      }
+      question.choices = built.choices;
+      question.answerIndex = built.answerIndex;
+    }
+    return CHOICE;
   }
 
   function setText(element, text) {
@@ -337,6 +461,16 @@ export function createEngine(options = {}) {
   }
 
   // ── 中途存档（契约 3.5 / 4.2 / 4.5）────────────────────────────────
+  /**
+   * 存档形状 = 契约 3.5 的 8 个字段 + 2 个**新增可缺省字段**（选择题用）：
+   *   types:   ('fill'|'choice')[]  每道题的题型
+   *   choices: string[][]           每道题的选项（填空题为空数组）
+   *
+   * 为什么是「新增可选」而不是改既有字段：storage.js 的 normalizeSession 会按契约
+   * 白名单重建 session，**任何额外字段都会被丢掉**。所以读取端必须容忍这两个字段缺失
+   * （见 resume() 的兜底），现有存档与现有字段语义一个都没变：
+   *   丢了 types 就按随机重新分配题型；丢了 choices 就按题重建选项（questionTypeOf）。
+   */
   function buildSession() {
     return {
       subjectId,
@@ -347,7 +481,9 @@ export function createEngine(options = {}) {
       answers: questions.map((question) => question.answer ?? ''),
       currentIndex,
       startedAt,
-      savedAt: now()
+      savedAt: now(),
+      types: questions.map((question) => (question.type === CHOICE ? CHOICE : FILL)),
+      choices: questions.map((question) => (Array.isArray(question.choices) ? [...question.choices] : []))
     };
   }
 
@@ -378,9 +514,56 @@ export function createEngine(options = {}) {
     return answer;
   }
 
+  /**
+   * 渲染选项区。
+   * - 选择题：把 options 渲染成按钮（点击即选中），并高亮已选项；
+   * - 填空 / 页面没有选项容器：清空列表并隐藏整块。
+   *
+   * ⚠️ 填空时必须把选项**从 DOM 里移除**，不能只 hidden：
+   * test/all-subjects-smoke.mjs 用 `document.querySelector('.choice-option')` 判断
+   * 当前是不是选择题，hidden 的旧选项仍会被 querySelector 命中，从而点错东西。
+   */
+  function renderChoiceOptions(question, isChoice) {
+    if (!choiceContainer) return null;
+    choiceContainer.replaceChildren();
+    if (choiceBlock) choiceBlock.hidden = !isChoice;
+    if (!isChoice) return null;
+
+    const choices = question.choices ?? [];
+    const answer = String(question.answer ?? '').trim();
+    let selectedOption = null;
+    choices.forEach((choice, index) => {
+      const option = doc.createElement('button');
+      option.type = 'button';
+      option.className = 'choice-option';
+      if (option.dataset) option.dataset.choiceIndex = String(index);
+      if (typeof option.setAttribute === 'function') {
+        option.setAttribute('data-choice-index', String(index));
+      }
+      const selected = answer !== '' && answer === choice;
+      if (selected) {
+        option.classList.add('is-selected');
+        if (typeof option.setAttribute === 'function') option.setAttribute('aria-pressed', 'true');
+        selectedOption = option;
+      }
+      // 选项文字用子节点承载：字母标号是装饰，正文才是内容，便于 CSS 分开排版。
+      const marker = doc.createElement('span');
+      marker.className = 'choice-option-index';
+      marker.textContent = String.fromCharCode(65 + index);
+      const label = doc.createElement('span');
+      label.className = 'choice-option-text';
+      label.textContent = choice;
+      option.append(marker, label);
+      choiceContainer.append(option);
+    });
+    return selectedOption;
+  }
+
   function renderQuestion() {
     const question = questions[currentIndex];
     if (!question) return;
+    const type = questionTypeOf(question);
+    const isChoice = type === CHOICE;
     const ctx = contextOf(question);
     const position = currentIndex + 1;
     const view = attempt(() => adapter.view(question, ctx)) ?? {};
@@ -405,30 +588,92 @@ export function createEngine(options = {}) {
       elements.fractionNumerator.textContent = prefix;
       elements.fractionNumerator.hidden = !prefix;
     }
+    // 选择题：收起输入框与等号，题面切单列；填空：原样恢复。
+    // 这一整块只在页面真的有选项容器时才执行，percent / powers 的 DOM 一个字都不碰。
+    if (choiceContainer) {
+      if (elements.answerWrap) elements.answerWrap.hidden = isChoice;
+      if (elements.equationOperator) elements.equationOperator.hidden = isChoice;
+      if (elements.equation?.classList) elements.equation.classList.toggle('choice-equation', isChoice);
+      if (elements.answerInput) elements.answerInput.disabled = isChoice;
+      // 侧栏提示跟着题型走：选择题里提示「按回车」会误导（那时根本没有输入框）。
+      setText(elements.sidebarTip, isChoice ? CHOICE_SIDEBAR_TIP : FILL_SIDEBAR_TIP);
+    }
+    const selectedOption = renderChoiceOptions(question, isChoice);
     if (elements.answerInput) {
-      elements.answerInput.value = displayValue(question.answer ?? '', prefix);
-      elements.answerInput.placeholder = hints.placeholder ?? '';
+      elements.answerInput.value = isChoice ? '' : displayValue(question.answer ?? '', prefix);
+      elements.answerInput.placeholder = isChoice ? '' : (hints.placeholder ?? '');
       if (hints.inputMode) elements.answerInput.inputMode = hints.inputMode;
     }
-    setText(elements.answerSuffix, hints.suffix ?? '');
-    setText(elements.answerLabel, hints.label);
-    setText(elements.inputHint, hints.hint);
+    setText(elements.answerSuffix, isChoice ? '' : (hints.suffix ?? ''));
+    setText(elements.answerLabel, isChoice ? '请选择正确选项' : hints.label);
+    setText(elements.inputHint, isChoice
+      ? '点击一个选项作答，选中后点「下一题」继续'
+      : hints.hint);
     if (elements.previousButton) elements.previousButton.disabled = currentIndex === 0;
     if (elements.nextButton) elements.nextButton.disabled = (question.answer ?? '').trim() === '';
     setText(elements.nextButtonText, position === questions.length ? '交卷' : '下一题');
 
-    if (typeof win.requestAnimationFrame === 'function' && elements.answerInput) {
-      win.requestAnimationFrame(() => elements.answerInput.focus());
+    if (typeof win.requestAnimationFrame === 'function') {
+      if (isChoice) {
+        // 选项每次渲染都会重建，焦点必须跟着回到已选项上，否则键盘用户每选一次就丢焦点。
+        win.requestAnimationFrame(() => (selectedOption ?? elements.choices)?.focus?.());
+      } else if (elements.answerInput) {
+        win.requestAnimationFrame(() => elements.answerInput.focus());
+      }
     }
   }
 
   // ── 答题流程 ──────────────────────────────────────────────────────
-  /** input 事件里只更新内存与按钮状态：不做重排、不落盘，避免拖慢连续作答。 */
+  /**
+   * input 事件里只更新内存与按钮状态：不做重排、不落盘，避免拖慢连续作答。
+   *
+   * ⚠️ 选择题必须在这里分叉：选择题的答案是「点了哪个选项」，不在输入框里。
+   * 若不分支，切题冒泡上来的这次同步会把已选选项覆盖成空串，
+   * 于是 goNext() 判定「没作答」直接返回，用户永远走不到下一题。
+   */
   function saveCurrentAnswer() {
     const question = questions[currentIndex];
     if (!question) return;
+    if (questionTypeOf(question) === CHOICE) {
+      if (elements.nextButton) elements.nextButton.disabled = (question.answer ?? '').trim() === '';
+      return;
+    }
     question.answer = String(elements.answerInput?.value ?? '').trim();
     if (elements.nextButton) elements.nextButton.disabled = question.answer === '';
+  }
+
+  /** 从事件目标向上找 data-choice-index（点在选项内部的文字节点上也能命中）。 */
+  function choiceIndexOf(node) {
+    let current = node;
+    for (let depth = 0; current && depth < 6; depth += 1) {
+      const raw = current.dataset?.choiceIndex ?? current.getAttribute?.('data-choice-index');
+      if (raw !== null && raw !== undefined && raw !== '') {
+        const index = Number(raw);
+        if (Number.isInteger(index) && index >= 0) return index;
+      }
+      current = current.parentElement ?? null;
+    }
+    return -1;
+  }
+
+  /**
+   * 点选项即作答：记录答案 → 落盘 → 重渲染（高亮选中项并解开「下一题」）。
+   * 刻意**不自动跳题**：选中即跳会让用户来不及改，也让「上一题」形同虚设；
+   * 与填空一致的节奏（选中 → 下一题）才能让两种题型混排时手感统一。
+   */
+  function selectChoice(index) {
+    const question = questions[currentIndex];
+    if (!question || questionTypeOf(question) !== CHOICE) return;
+    const value = question.choices?.[index];
+    if (typeof value !== 'string' || value === '') return;
+    question.answer = value;
+    persistSession();
+    renderQuestion();
+  }
+
+  function onChoiceClick(event) {
+    const index = choiceIndexOf(event?.target ?? null);
+    if (index >= 0) selectChoice(index);
   }
 
   function goNext() {
@@ -460,6 +705,7 @@ export function createEngine(options = {}) {
     }
     clearStoredSession();
     questions = createQuiz(pool, random);
+    assignTypes(questions);
     currentIndex = 0;
     startedAt = now();
     elapsed = 0;
@@ -476,6 +722,9 @@ export function createEngine(options = {}) {
     if (!session) return start();
 
     const pool = new Map((adapter.items() ?? []).map((item, index) => [item.id ?? String(index), item]));
+    // 选择题的可选字段：长度对得上才采信，否则下面统一重建（向后兼容的关键）。
+    const storedTypes = Array.isArray(session.types) ? session.types : null;
+    const storedChoices = Array.isArray(session.choices) ? session.choices : null;
     const rebuilt = [];
     for (let index = 0; index < session.questionIds.length; index += 1) {
       const item = pool.get(session.questionIds[index]);
@@ -484,14 +733,29 @@ export function createEngine(options = {}) {
         clearStoredSession();
         return start();
       }
+      const stored = storedChoices?.[index];
       rebuilt.push({
         ...item,
         direction: session.directions[index] === 'backward' ? 'backward' : 'forward',
-        answer: String(session.answers[index] ?? '')
+        answer: String(session.answers[index] ?? ''),
+        // 缺 types 时留 undefined，交给下面的 assignTypes 重新分配。
+        type: storedTypes ? (storedTypes[index] === CHOICE ? CHOICE : FILL) : undefined,
+        choices: Array.isArray(stored) ? [...stored] : undefined
       });
     }
 
     questions = rebuilt;
+    // 老存档（没有 types / choices）或存档被 storage.js 归一化过：按当前配置重新分配。
+    // 重分配只决定「怎么问」，不动已作答内容，用户不会因此丢答案。
+    const typesUsable = Array.isArray(storedTypes) && storedTypes.length === questions.length;
+    const choicesUsable = Array.isArray(storedChoices) && storedChoices.length === questions.length;
+    if (typesUsable && choicesUsable) {
+      for (const question of questions) {
+        if (question.type === undefined) question.type = FILL;
+      }
+    } else {
+      assignTypes(questions);
+    }
     currentIndex = Math.min(Math.max(0, Number(session.currentIndex) || 0), questions.length - 1);
     startedAt = Number(session.startedAt) || now();
     elapsed = 0;
@@ -662,6 +926,8 @@ export function createEngine(options = {}) {
     on(elements.nextButton, 'click', goNext);
     on(elements.previousButton, 'click', goPrevious);
     on(elements.answerInput, 'keydown', onKeydown);
+    // 选项用事件委托挂在容器上：选项每次渲染都重建，逐个绑定会泄漏监听。
+    on(choiceContainer, 'click', onChoiceClick);
     on(win, 'beforeunload', persistSession);
     on(doc, 'visibilitychange', onVisibilityChange);
   }
@@ -683,6 +949,7 @@ export function createEngine(options = {}) {
       subjectId,
       mode,
       questionTypes: [...questionTypes],
+      choiceEnabled: canRenderChoices,
       screen,
       currentIndex,
       total: questions.length,
@@ -693,7 +960,10 @@ export function createEngine(options = {}) {
       questions: questions.map((question) => ({
         id: question.id,
         direction: question.direction,
-        answer: question.answer ?? ''
+        answer: question.answer ?? '',
+        // 题型与选项**数量**（不暴露答案下标，避免调试快照泄露正确答案）。
+        type: question.type === CHOICE ? CHOICE : FILL,
+        choiceCount: Array.isArray(question.choices) ? question.choices.length : 0
       }))
     };
   }

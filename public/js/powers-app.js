@@ -14,3 +14,6 @@ const engine = createEngine({
 
 // 有未完成的测试就直接续答；没有则停留在欢迎页，等用户点「开始测试」。
 if (engine.hasSession()) engine.resume();
+
+// 就绪标记：理由同 app.js —— 消除「按钮已 enabled 但监听还没挂上」的点击丢失窗口。
+document.body.dataset.engineReady = '1';

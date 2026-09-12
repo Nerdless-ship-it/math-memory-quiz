@@ -98,28 +98,30 @@ async function navigator_(url) {
 /**
  * 等待答题页真正就绪并点击开始。
  *
- * ⚠️ 必须等 `#start-button` 变为**可用**，而不是只等它出现：
- * quiz-page.js（通用页）在引导期把开始按钮设为 disabled，直到 registry / 适配器 /
- * 题库全部加载完才解锁。只判断「存在」会在引导未完成时点到 disabled 按钮，
- * 于是 click 静默无效 —— 这正是本测试此前 4 次跑 3 次红的随机失败根因。
+ * ⚠️ 判据是 `body[data-engine-ready="1"]`，不是「start-button 存在且未 disabled」。
+ * 后者有真实漏洞：percent.html / powers.html 的开始按钮在**静态 HTML 里就是 enabled**，
+ * 而点击监听要等 deferred module（app.js / powers-app.js）执行完才挂上。
+ * 只等 disabled 状态会在模块执行前就点下去，点击被静默吞掉 → 页面停在欢迎屏、
+ * 控制台无任何错误。这造成过 12 轮里 5 次偶发失败，且在改动前的基线上同样复现。
  *
- * 注意 percent.html / powers.html 是既有的专用页，结构里 start-button 从不 disabled，
- * 所以这里**刻意不校验** quizState（那三个字只有通用页会设），只依赖 disabled 状态，
- * 两种页面都能正确判定。
+ * 两个入口现在都会在执行末尾设置该标记（app.js / powers-app.js），通用页
+ * （quiz-page.js）就绪时设置同样的标记，因此三种页面判定方式统一。
+ * 仍保留 disabled 检查作为第二重保险。
  */
 async function startRound() {
   const ready = await waitFor(
-    "(() => { const b = document.querySelector('#start-button'); return !!b && b.disabled === false; })()",
-    '答题页未在超时内就绪（开始按钮一直不可用）'
+    "(() => { const b = document.querySelector('#start-button'); return !!b && b.disabled === false && document.body.dataset.engineReady === '1'; })()",
+    '答题页未在超时内就绪（开始按钮不可用或引擎就绪标记未出现）'
   );
   if (!ready) return false;
   await evaluate("document.querySelector('#start-button').click()");
   const entered = await waitFor("!document.querySelector('#quiz-screen').hidden", '点击开始后未进入答题屏');
   if (!entered) {
-    // 失败时把现场状态带出来，否则这种偶发失败无法定位（曾只报「未进入答题屏」）。
+    // 失败时把现场状态带出来，否则这种偶发失败无法定位。
     const state = await evaluate(`JSON.stringify({
       url: location.pathname + location.search,
       title: document.title,
+      engineReady: document.body.dataset.engineReady ?? null,
       quizState: document.body.dataset.quizState ?? null,
       welcomeHidden: document.querySelector('#welcome-screen')?.hidden ?? null,
       quizHidden: document.querySelector('#quiz-screen')?.hidden ?? null,

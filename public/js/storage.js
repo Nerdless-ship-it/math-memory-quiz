@@ -705,7 +705,14 @@ export function dueItems(subjectId, storage, now = Date.now()) {
 
 // ── 中途存档 ────────────────────────────────────────────────────────────
 
-/** 校验并归一化 session；questionIds 为空视为非法（返回 null）。 */
+/**
+ * 校验并归一化 session；questionIds 为空视为非法（返回 null）。
+ *
+ * 白名单是**严格**的：没列在这里的字段会被静默丢弃。这不是理论风险——
+ * 选择题模式新增 `types`（每题题型）与 `choices`（每题选项）时，若忘了把它们
+ * 加进来，存档仍能成功写入、也能读回，但题型与选项全部消失，刷新后会从
+ * 选择题退化成填空题且选项丢失，而且没有任何报错。加字段时务必同步这里。
+ */
 export function normalizeSession(session, now = Date.now()) {
   if (!isPlainObject(session)) return null;
   const subjectId = String(session.subjectId ?? '');
@@ -713,6 +720,8 @@ export function normalizeSession(session, now = Date.now()) {
   if (!subjectId || !questionIds.length) return null;
   const directions = toStringArray(session.directions);
   const answers = toStringArray(session.answers);
+  const types = toStringArray(session.types);
+  const rawChoices = Array.isArray(session.choices) ? session.choices : [];
   const index = toFiniteNumber(session.currentIndex);
   const startedAt = toFiniteNumber(session.startedAt);
   const at = toFiniteNumber(now);
@@ -725,6 +734,15 @@ export function normalizeSession(session, now = Date.now()) {
     questionIds: [...questionIds],
     directions: questionIds.map((_, position) => normalizeDirection(directions[position])),
     answers: questionIds.map((_, position) => answers[position] ?? ''),
+    // 题型：只认 fill / choice，其余（含缺失）一律留空串由引擎重新分配，
+    // 而不是写成 'fill'——引擎用「长度对得上且值合法」判断能否采信，
+    // 填错值会让它误以为存档完整。
+    types: questionIds.map((_, position) => {
+      const value = types[position];
+      return value === 'choice' || value === 'fill' ? value : '';
+    }),
+    // 选项：每题一个字符串数组；非数组/缺失一律给空数组。
+    choices: questionIds.map((_, position) => toStringArray(rawChoices[position])),
     currentIndex,
     startedAt: startedAt === null ? stamp : startedAt,
     savedAt: toFiniteNumber(session.savedAt) ?? stamp

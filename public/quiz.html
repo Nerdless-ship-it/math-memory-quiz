@@ -93,7 +93,7 @@
               <p class="sidebar-direction" id="direction-label">—</p>
             </div>
             <div class="sidebar-rule"></div>
-            <p class="sidebar-tip">输入答案后按回车，可直接进入下一题。</p>
+            <p class="sidebar-tip" id="sidebar-tip">输入答案后按回车，可直接进入下一题。</p>
           </aside>
 
           <div class="question-area">
@@ -110,6 +110,14 @@
               </label>
             </div>
             <p class="input-hint" id="input-hint">请输入答案</p>
+
+            <!-- 选择题选项区（契约第 5 节）。引擎把它当作可选句柄：
+                 没有这个节点（percent.html / powers.html）或本题是填空时，
+                 引擎会清空并隐藏整块，绝不报错。选项由 engine.js 渲染成 button。 -->
+            <div class="choice-block" id="choice-block" hidden>
+              <p class="choice-legend">选出正确的一项</p>
+              <div class="choice-list" id="choice-list" role="group" aria-label="选项"></div>
+            </div>
 
             <div class="question-actions">
               <button class="secondary-button" id="previous-button" type="button">上一题</button>

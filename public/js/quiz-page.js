@@ -18,6 +18,10 @@ const ENGINE_URL = './engine.js';
 const REGISTRY_URL = './registry.js';
 const STORAGE_URL = './storage.js';
 
+// 选择题默认参数（与 engine.js / storage.js 的默认值保持一致）。
+const DEFAULT_CHOICES_PER_QUESTION = 4;
+const DEFAULT_CHOICE_RATIO = 0.5;
+
 // 契约第 4 节要求的 elements id。
 // 命名沿用既有 percent.html / powers.html：camelCase 键 ↔ kebab-case id，
 // 三个「屏」在既有页面里带 -screen 后缀，这里同时兜底两种写法。
@@ -51,11 +55,15 @@ const ELEMENT_IDS = Object.freeze({
   timeComparison: ['time-comparison'],
   correctionTitle: ['correction-title'],
   correctionList: ['correction-list'],
+  // 选择题（契约第 5 节）：通用页有选项容器；引擎拿不到时会把这题降级为填空。
+  choices: ['choice-list'],
+  choiceBlock: ['choice-block'],
   // 可选（percent 专有 / 通用页增强），缺失时引擎自动跳过
   answerWrap: ['answer-wrap'],
   fractionNumerator: ['fraction-numerator'],
   equationOperator: ['equation-operator'],
-  topicLabel: ['topic-label']
+  topicLabel: ['topic-label'],
+  sidebarTip: ['sidebar-tip']
 });
 
 const EXTRA_IDS = Object.freeze([
@@ -312,6 +320,30 @@ async function countMistakes(subjectId) {
   }
 }
 
+/**
+ * 读取选择题偏好。
+ *
+ * 只取 storage.js 的 prefs.choicesPerQuestion（默认 4）。**刻意不取 prefs.questionTypes**：
+ * 它的默认值是 ['fill']，一旦用它覆盖科目声明的 ['fill','choice']，选择题会在无声无息中消失，
+ * 而且不报任何错——这类「静默失效」正是本项目反复踩过的坑。
+ *
+ * 读不到偏好（storage 未就绪 / 数据损坏）时退回默认值，绝不影响答题。
+ */
+async function readChoicePrefs() {
+  const fallback = { choicesPerQuestion: DEFAULT_CHOICES_PER_QUESTION, choiceRatio: DEFAULT_CHOICE_RATIO };
+  try {
+    const storage = await import(/* @vite-ignore */ STORAGE_URL);
+    const profile = typeof storage.readProfile === 'function' ? storage.readProfile() : null;
+    const count = Number(profile?.prefs?.choicesPerQuestion);
+    if (Number.isInteger(count) && count >= 2 && count <= 8) {
+      return { ...fallback, choicesPerQuestion: count };
+    }
+    return fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 /* ── 启动 ─────────────────────────────────────────────────────────────── */
 
 function readSubjectParam() {
@@ -462,6 +494,7 @@ async function main() {
   }
 
   let engine = null;
+  const choicePrefs = await readChoicePrefs();
   try {
     engine = createEngine({
       adapter: activeAdapter,
@@ -471,6 +504,15 @@ async function main() {
       questionTypes: Array.isArray(subject.questionTypes) && subject.questionTypes.length
         ? subject.questionTypes
         : ['fill'],
+      // 选择题（契约第 5 节）：
+      //   1. 选项数量取用户偏好（storage.js 的 prefs.choicesPerQuestion，默认 4）；
+      //   2. 干扰项池一律用**完整题库**——错题重练时只有两三条错题，
+      //      若从收窄后的池子取干扰项就永远凑不齐 4 个选项；
+      //   3. 刻意不读 prefs.questionTypes：它的默认值是 ['fill']，
+      //      用它覆盖科目声明的 ['fill','choice'] 会让选择题静默消失。
+      choicesPerQuestion: choicePrefs.choicesPerQuestion,
+      choiceRatio: choicePrefs.choiceRatio,
+      choicePool: () => adapter.items(),
       onFinish() {
         showScreen(nodes, 'result');
         document.body.dataset.quizState = 'finished';
@@ -531,6 +573,12 @@ async function main() {
     });
   }
 
+  // 所有按钮监听都已挂上，此刻声明「真正可交互」。
+  // 与 percent.html / powers.html 的 app.js 用同一个标记名，三种页面契约统一；
+  // 外部（尤其自动化测试）据此判断可以安全点击，避免点在还没挂监听的按钮上。
+  // 必须放在监听注册之后——提前设置就等于撒谎。
+  document.body.dataset.engineReady = '1';
+
   const mistakesButton = nodes['mistakes-button'];
   if (mistakesButton) {
     mistakesButton.addEventListener('click', () => {
@@ -568,7 +616,10 @@ async function main() {
     subject,
     adapterId: adapter.id ?? subject.adapter,
     itemCount: items.length,
-    mode
+    mode,
+    choicesPerQuestion: choicePrefs.choicesPerQuestion,
+    choiceRatio: choicePrefs.choiceRatio,
+    hasChoiceContainer: Boolean(elements.choices)
   };
 
   refreshMistakesEntry();

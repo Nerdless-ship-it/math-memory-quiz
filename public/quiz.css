@@ -83,6 +83,85 @@
   font-weight: 700;
 }
 
+/* ── 选择题选项区（quiz.html 专有，percent.html / powers.html 没有这段 DOM）──
+ * 引擎在选择题模式下做三件事：
+ *   1. 给 .answer-wrap 与 #equation-operator 加 hidden（收起输入框与等号）；
+ *   2. 给 #equation 加 .choice-equation（题面由 3 列切单列）；
+ *   3. 往 #choice-list 里塞 .choice-option 按钮。
+ *
+ * ⚠️ hidden 必须在这里显式补 `display: none`：.answer-wrap 自带 display:flex，
+ * 作者样式优先级高于浏览器默认的 [hidden]{display:none}，不补这条等于没隐藏。
+ */
+.equation.choice-equation { grid-template-columns: minmax(0, 1fr); }
+.answer-wrap[hidden] { display: none; }
+.choice-block[hidden] { display: none; }
+
+.choice-block { margin-top: 34px; }
+
+.choice-legend {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.choice-list { display: grid; gap: 12px; min-width: 0; }
+
+.choice-option {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.7;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+}
+
+.choice-option:hover { border-color: var(--subject-accent, var(--green)); }
+
+.choice-option:focus-visible {
+  outline: 2px solid var(--subject-accent, var(--green));
+  outline-offset: 2px;
+}
+
+.choice-option-index {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--subject-accent, var(--green));
+  font-family: Georgia, "Noto Serif SC", serif;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.choice-option-text { min-width: 0; overflow-wrap: anywhere; }
+
+.choice-option.is-selected {
+  border-color: var(--subject-accent, var(--green));
+  background: var(--soft);
+  box-shadow: 0 0 0 4px rgba(18, 107, 82, 0.1);
+}
+
+.choice-option.is-selected .choice-option-index {
+  border-color: var(--subject-accent, var(--green));
+  background: var(--subject-accent, var(--green));
+  color: #fff;
+}
+
 .correction-actions {
   display: flex;
   flex-wrap: wrap;
@@ -520,6 +599,11 @@
   .weak-name { font-size: 12px; }
   .weak-count { font-size: 11px; }
   .trend-caption { font-size: 11px; }
+  /* 选择题：390px 下压缩留白与字号，保证选项一行放得下不撑出横向滚动 */
+  .choice-block { margin-top: 24px; }
+  .choice-list { gap: 10px; }
+  .choice-option { padding: 12px 13px; gap: 10px; font-size: 15px; }
+  .choice-option-index { width: 22px; height: 22px; font-size: 12px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

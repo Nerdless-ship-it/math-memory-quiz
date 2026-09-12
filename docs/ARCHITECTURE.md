@@ -294,9 +294,21 @@ const LEGACY = {
   answers: string[],            // 已作答内容，未答为空串
   currentIndex: number,
   startedAt: number,
-  savedAt: number
+  savedAt: number,
+  // ── 以下两个字段为选择题模式新增，**可缺省**（旧存档没有它们也合法）──
+  types: ('' | 'fill' | 'choice')[],  // 每题题型；空串表示「未分配」，由引擎重新决定
+  choices: string[][]                 // 每题选项（填空题为 []），读回时保持原顺序
 }
 ```
+
+> ⚠️ **`normalizeSession` 是严格白名单**：没列进去的字段会被静默丢弃。这不是理论风险——
+> 选择题模式新增 `types` / `choices` 时若忘了同步白名单，存档「写入成功、读回成功」，
+> 但题型与选项全部消失，刷新后选择题静默退化成填空题，**且没有任何报错**。
+> 加字段时务必同步 `storage.js` 的 `normalizeSession`，并补一条回归测试
+> （见 `test/storage-v2.test.mjs` 的「session 必须是严格白名单」）。
+>
+> 引擎读取时用「长度与题量对得上且值合法」判断能否采信；不采信时只重新分配「怎么问」，
+> **不动 `answers` / `directions` / `currentIndex`**，用户不会丢答案。
 
 **打卡与偏好**
 
@@ -528,17 +540,47 @@ export function buildChoices(item, direction, pool, options)
 // → { choices: string[], answerIndex: number }
 ```
 
+`options`：`{ choicesPerQuestion = 4, random = Math.random, prompt?, answer? }`。
+`choices` 已乱序（Fisher-Yates，复用 `quiz.js` 的 `shuffle`），**恰好一个**元素等于正确答案，
+`answerIndex` 指向它。答案为空串时返回 `{ choices: [], answerIndex: -1 }`。
+
 规则：
 
-1. 干扰项从**同科目同 tags 的池子**里取（`tags` 全空的科目则从全池取），保证难度同构。
-2. 取 `choicesPerQuestion - 1` 个干扰项，去重，且不得等于正确答案。
-3. 干扰项不足时（池子太小）从更大范围补齐；仍不足则减题量，**绝不重复填充**。
-4. 用 Fisher-Yates 洗牌（复用 `quiz.js` 的 `shuffle`），`answerIndex` 为正确项洗后下标。
-5. 用可注入的 `random` 参数以便单测确定性。
+1. 干扰项从**同科目同 tags** 的池子里取（`tags` 全空则从全池取），保证难度同构。
+2. **按方向取对应字段**：`forward` 只从其它条目的 `back` 取，`backward` 只从 `front` 取。
+3. 用 `adapters/generic.js` 的 `normalizeText` 去重（`'1.7'` 与 `'1.7 '` 视为同一项）。
+4. 干扰项**不得等于正确答案**，也**不得等于题面**——后者是第 3.0.1 节维度交叉的必然要求：
+   真实题库 552 个「科目×条目×方向」组合里有 **150 个**存在与题面同文的候选
+   （生肖 12 / 节气 16 / 朝代 18 / 化学 104）。只排除「等于答案」会让用户看到
+   「秦 → ？」，而选项里赫然写着一个「秦」，逻辑上自相矛盾。
+5. 池子不足时从更大范围补齐；仍不足则**减少选项数**（夹在 2..8），绝不重复填充凑数。
+6. 纯函数，不碰 DOM、不读写 localStorage；`random` 可注入以便确定性测试。
+
+**引擎接入**（`engine.js`）：科目 `questionTypes` 同时含 `fill` 与 `choice` 时，
+按 `choiceRatio`（默认 0.5）逐题随机选题型；选项凑不齐 2 个时该题**退回填空**。
+选项容器 `#choice-list` 取自 `ELEMENT_IDS`，**缺失时整条选择题路径关闭**并退回填空——
+`percent.html` / `powers.html` 没有这个节点，因此两科的交互一字未变。
+
+判分**不新造逻辑**：交卷时仍走 `adapter.isCorrect(question, { direction, input: question.answer })`，
+所以统计、错题集、订正、掌握度、打卡全部与填空共用同一条路径。
 
 ---
 
-## 6. UI 契约
+## 6. 就绪契约（`body[data-engine-ready="1"]`）
+
+三种答题页（`percent.html` / `powers.html` / `quiz.html`）都在**所有按钮监听挂好之后**
+设置 `document.body.dataset.engineReady = '1'`。
+
+为什么必须统一：`percent.html` / `powers.html` 的开始按钮在**静态 HTML 里就是 enabled**，
+而点击监听要等 deferred module 执行完才挂上。两者之间存在一个「点了没反应」的窗口，
+外部（尤其自动化测试）只判断「按钮存在且未 disabled」就会点空，**且控制台没有任何报错**。
+实测该窗口造成过 12 轮里 5 次偶发失败，且能改前基线复现。
+
+因此：判定页面可交互请**以这个标记为准**（可配合 `disabled` 状态做二重保险）。
+
+---
+
+## 7. UI 契约
 
 - 首页（`index.html`）：科目卡片**由注册表渲染**（不再手写卡片），
   分「速算」与「考公常识」两组；保留历史成绩与错题集区块及其 id。
@@ -551,14 +593,15 @@ export function buildChoices(item, direction, pool, options)
 
 ---
 
-## 7. 验收标准
+## 8. 验收标准
 
 **必须全绿（不可修改现有测试）**
 
 ```powershell
-npm test                     # 92 项：既有 15 + 引擎 + 存储 + 掌握度 + 注册表 + 题库质量
-npm run test:browser         # percent 端到端
-npm run test:powers-browser  # powers 端到端
+npm test                     # 123 项：既有 15 + 引擎 + 存储 + 掌握度 + 注册表 + 题库质量
+                             #         + 架构不变量 + 选择题干扰项
+npm run test:browser         # percent 端到端（升级前冻结用例）
+npm run test:powers-browser  # powers 端到端（升级前冻结用例）
 npm run test:all-subjects    # 全部 10 个科目端到端 + 首页看板 + 响应式溢出
 ```
 
@@ -592,7 +635,7 @@ npm run test:all-subjects    # 全部 10 个科目端到端 + 首页看板 + 响
 
 ---
 
-## 8. 禁止事项
+## 9. 禁止事项
 
 1. ❌ 修改 `test/` 下任何既有文件。
 2. ❌ 改 `js/data.js` / `js/powers-data.js` 的结构或数值。
