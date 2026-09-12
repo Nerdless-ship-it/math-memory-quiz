@@ -73,7 +73,8 @@ const EXTRA_IDS = Object.freeze([
   'welcome-index', 'welcome-title', 'welcome-description',
   'subject-sheet-label', 'subject-sheet-index', 'subject-sheet-icon',
   'subject-sheet-title', 'subject-sheet-subtitle', 'subject-sheet-types', 'subject-sheet-count',
-  'result-index', 'result-title', 'correction-title', 'mistakes-button', 'equation'
+  'result-index', 'result-title', 'correction-title', 'mistakes-button', 'equation',
+  'figure-demo', 'figure-demo-button'
 ]);
 
 function pickElement(...ids) {
@@ -175,6 +176,132 @@ function renderSubjectChrome(subject, nodes, itemCount) {
     nodes['welcome-meta'].hidden = parts.length === 0;
   }
   if (nodes['result-index']) nodes['result-index'].textContent = `${subject.title} · 测试完成`;
+}
+
+/* ── 欢迎页图形演示 ────────────────────────────────────────────────────
+ * 订正页的动画只在答错后出现；想先看再练的学生没有入口。这里在欢迎页补一个
+ * 可选的演示区：翻看题库里的图形并直接播放折叠 / 切割动画。
+ *
+ * 数据驱动红线：是否出现由注册表的 `demo: 'figure'` 决定，演示哪些图形按
+ * figure.kind 过滤——渲染与控制代码不得出现科目 id（test/architecture.test.mjs）。
+ * 动画模块（fold-anim-view，几十 KB）在第一次点开时才 import，其余科目零加载。
+ */
+const DEMO_FIGURE_KINDS = Object.freeze({
+  'figure:cube-net': { button: '看展开演示', note: '从立方体拆开、铺平成展开图，编号与题目一致（展开图始终正放；立方体可拖动转角度、点面换底）' },
+  'figure:cross-section': { button: '看切割演示', note: '平面扫过立方体，不同深度截出不同形状' }
+});
+
+function setupFigureDemo(subject, nodes, items) {
+  const button = nodes['figure-demo-button'];
+  const container = nodes['figure-demo'];
+  if (!button || !container) return;
+
+  const animatable = (items ?? []).filter((item) => DEMO_FIGURE_KINDS[item?.figure?.kind]);
+  const kind = animatable[0]?.figure?.kind;
+  if (subject?.demo !== 'figure' || !kind) return; // 其余科目：按钮保持 hidden，不绑任何事件
+
+  const meta = DEMO_FIGURE_KINDS[kind];
+  button.textContent = meta.button;
+
+  let modulePromise = null;
+  let module = null;
+  let handle = null;
+  let index = 0;
+  let nav = null;
+  let counter = null;
+  let body = null;
+
+  function unmount() {
+    handle?.destroy?.();
+    handle = null;
+  }
+
+  function showItem() {
+    if (!module || !body) return;
+    unmount();
+    const item = animatable[index];
+    const itemKind = item.figure.kind;
+    try {
+      if (itemKind === 'figure:cube-net') {
+        const cells = item.figure.spec?.cells ?? [];
+        // 标签口径与 figure.js 的 renderCubeNet 一致：行优先 1..6（题库数据已预排序）。
+        const labels = cells.map((_, cellIndex) => String(cellIndex + 1));
+        handle = module.mountFoldAnimation(body, cells, { labels, note: meta.note, duration: 2400 });
+      } else {
+        handle = module.mountCrossSectionAnimation(body, item.figure.spec, { note: meta.note });
+      }
+      handle.play();
+    } catch (error) {
+      // 失败不许静默：把原因写给用户（与 engine.js 的图形错误处理同思路）。
+      body.replaceChildren();
+      const failed = document.createElement('p');
+      failed.className = 'figure-demo-error';
+      failed.textContent = `演示加载失败：${error?.message ?? error}`;
+      body.append(failed);
+      handle = null;
+    }
+    if (counter) counter.textContent = `第 ${index + 1} / ${animatable.length} 图`;
+    if (nav) {
+      nav.querySelector('.figure-demo-prev').disabled = index === 0;
+      nav.querySelector('.figure-demo-next').disabled = index === animatable.length - 1;
+    }
+  }
+
+  function buildSkeleton() {
+    nav = document.createElement('div');
+    nav.className = 'figure-demo-nav';
+    const prev = document.createElement('button');
+    prev.type = 'button';
+    prev.className = 'figure-demo-prev';
+    prev.textContent = '◀ 上一图';
+    prev.addEventListener('click', () => {
+      if (index > 0) { index -= 1; showItem(); }
+    });
+    counter = document.createElement('span');
+    counter.className = 'figure-demo-counter';
+    const next = document.createElement('button');
+    next.type = 'button';
+    next.className = 'figure-demo-next';
+    next.textContent = '下一图 ▶';
+    next.addEventListener('click', () => {
+      if (index < animatable.length - 1) { index += 1; showItem(); }
+    });
+    nav.append(prev, counter, next);
+    body = document.createElement('div');
+    body.className = 'figure-demo-body';
+    container.append(nav, body);
+  }
+
+  button.addEventListener('click', async () => {
+    if (!container.hidden) {
+      // 收起：停掉动画循环并清空，欢迎页恢复原样。
+      container.hidden = true;
+      button.textContent = meta.button;
+      unmount();
+      return;
+    }
+    container.hidden = false;
+    button.textContent = '收起演示';
+    if (!nav) {
+      button.disabled = true;
+      try {
+        modulePromise ??= import('./fold-anim-view.js');
+        module = await modulePromise;
+      } catch (error) {
+        const failed = document.createElement('p');
+        failed.className = 'figure-demo-error';
+        failed.textContent = `演示组件加载失败：${error?.message ?? error}`;
+        container.append(failed);
+        return;
+      } finally {
+        button.disabled = false;
+      }
+      buildSkeleton();
+    }
+    showItem();
+  });
+
+  button.hidden = false;
 }
 
 function showScreen(nodes, name) {
@@ -429,6 +556,7 @@ async function main() {
   }
 
   renderSubjectChrome(subject, nodes, items.length);
+  setupFigureDemo(subject, nodes, items);
 
   // 3) 装载引擎。
   const { createEngine, collectElements, error: engineError } = await loadEngine();

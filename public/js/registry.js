@@ -208,7 +208,9 @@ export const SUBJECTS = Object.freeze([
     // 图形题：back 是选项标签 A/B/C/D，重复是内容特性而非数据错误。
     allowDuplicateBack: true,
     // 题目身份：题干展开图 + 四个选项组合（front/back 都是模板文案，不能用来区分题目）
-    uniqueBy: 'choices'
+    uniqueBy: 'choices',
+    // 欢迎页演示：quiz-page.js 见到该声明就显示「看展开演示」按钮（数据驱动，非硬编码）
+    demo: 'figure'
   },
   {
     id: 'cross-section',
@@ -230,7 +232,9 @@ export const SUBJECTS = Object.freeze([
     allowDuplicateFront: true,
     allowDuplicateBack: true,
     // 题干 24 条完全相同（差异全在选项里），题目身份用选项组合
-    uniqueBy: 'choices'
+    uniqueBy: 'choices',
+    // 欢迎页演示：quiz-page.js 见到该声明就显示「看切割演示」按钮（数据驱动，非硬编码）
+    demo: 'figure'
   }
 ]);
 

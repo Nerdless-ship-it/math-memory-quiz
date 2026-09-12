@@ -632,3 +632,54 @@
   .subject-card { transition: none; }
   .subject-card:hover { transform: none; }
 }
+
+/* ── 欢迎页图形演示（注册表声明 demo:'figure' 的科目才可见）────────────
+ * 容器复用页面设计令牌（--ink / --muted / --mint），不另起配色。
+ * 动画本体（.fold-anim）的样式在 fold-anim.css，这里只管演示区的骨架。 */
+.figure-demo {
+  margin-top: 18px;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--mint, #e3efe9);
+  border-radius: 12px;
+  background: var(--soft, #f6faf8);
+  max-width: 360px;
+}
+
+.figure-demo-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.figure-demo-nav button {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--green, #126b52);
+  background: transparent;
+  border: 1px solid var(--mint, #e3efe9);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.figure-demo-nav button:hover:not(:disabled) { background: var(--mint, #e3efe9); }
+.figure-demo-nav button:disabled { opacity: 0.4; cursor: default; }
+
+.figure-demo-counter {
+  font-family: Georgia, "Noto Serif SC", serif;
+  font-size: 13px;
+  color: var(--muted, #66716d);
+}
+
+.figure-demo-error {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--coral, #d75a43);
+}
+
+@media (max-width: 760px) {
+  .figure-demo { max-width: 100%; padding: 12px; }
+}

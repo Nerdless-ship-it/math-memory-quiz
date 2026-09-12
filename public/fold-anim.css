@@ -1,10 +1,12 @@
-/* 折叠动画样式（fold-anim-view.js 生成的内联 SVG）。
+/* 折叠 / 展开动画样式（fold-anim-view.js 生成的内联 SVG）。
  *
  * 类名由 fold-anim-view.js 产生，改动时请同步两个文件：
  *   .fold-svg          动画容器
  *   .fold-face         每个面；--front / --side / --back 三档灰阶给出立体感
+ *   .fold-face--hover  悬停高亮（提示可点击换底）
  *   .fold-face-label   面上的展开图编号
- *   .fold-anim         挂载点（含重播按钮）
+ *   .fold-anim         挂载点（含「展开 ⇄ 折回」按钮）
+ *   .fold-anim-stage   画布：拖动旋转视角，点击面换底
  */
 
 .fold-svg {
@@ -48,6 +50,7 @@
   /* 字号用 SVG 用户单位（viewBox 是 200×200 量级），不能用 px 思维的数值 */
   font-size: 13px;
   font-weight: 700;
+  pointer-events: none; /* 编号在面正中央，不拦截点击——点编号 = 点它所在的面 */
 }
 
 /* ── 挂载点与重播按钮 ─────────────────────────────────────────── */
@@ -79,6 +82,27 @@
 }
 
 .fold-anim-button:hover { border-color: #a9b7b1; background: var(--soft, #f2f5f3); }
+
+/* ── 画布上的直接操控（拖动旋转 / 点击换底）─────────────────────
+ *
+ * 视角与换底都在画布上直接完成，不用滑块（用户反馈滑块不方便）。
+ * 拖动用抓握手型提示；touch-action: none 让触屏拖动不滚页面；
+ * 键盘用户用 stage 上的方向键（stage 可聚焦）。
+ */
+.fold-anim-stage {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  outline-offset: 2px;
+}
+
+.fold-anim-stage:active { cursor: grabbing; }
+
+/* 悬停高亮：静止时提示「这个面可以点它换底」 */
+.fold-face--hover {
+  stroke: var(--green, #126b52);
+  stroke-width: 2.4;
+}
 
 .fold-anim-note {
   color: var(--muted, #66716d);

@@ -1004,7 +1004,7 @@ export function createEngine(options = {}) {
     const button = doc.createElement('button');
     button.type = 'button';
     button.className = 'correction-demo';
-    button.textContent = kind === 'figure:cube-net' ? '演示折叠过程' : '演示切割过程';
+    button.textContent = kind === 'figure:cube-net' ? '演示展开过程' : '演示切割过程';
     button.addEventListener('click', () => { toggleFigureDemo(wrap, question); });
     wrap.append(button);
     return wrap;
@@ -1016,7 +1016,7 @@ export function createEngine(options = {}) {
     if (wrap.dataset.demoMounted === '1') {
       wrap.dataset.demoMounted = '';
       wrap.querySelector('.fold-anim')?.remove();
-      wrap.querySelector('.correction-demo').textContent = kind === 'figure:cube-net' ? '演示折叠过程' : '演示切割过程';
+      wrap.querySelector('.correction-demo').textContent = kind === 'figure:cube-net' ? '演示展开过程' : '演示切割过程';
       return;
     }
     try {
@@ -1029,7 +1029,7 @@ export function createEngine(options = {}) {
         const cells = question.figure?.spec?.cells;
         options = {
           labels: (cells ?? []).map((_, index) => String(index + 1)),
-          note: '从摊平的展开图折成立方体',
+          note: '从立方体拆开、铺平成展开图（展开图始终正放；立方体可拖动转角度、点面换底）',
           duration: 2600
         };
         const handle = mount(wrap, cells, options);
