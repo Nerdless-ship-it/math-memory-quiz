@@ -31,6 +31,11 @@ const norm = (v) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] 
 const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
 
 // ── 基本体（SDF，单位：与世界同尺度）────────────────────────────────
+//
+// ⚠️ 坐标约定：**y 轴向上**（x 右、z 朝观察者）。
+// 早先按「z 朝上」写（沿用纸面坐标的直觉），在斜二测下看不出问题；
+// 换成真 3D 透视后立刻暴露——圆柱会**躺在屏幕上**，圆锥倒向一边。
+// 真实三维场景一律用 y 向上，改前请先确认这条约定。
 
 /** 立方体（棱长 size，中心在原点）。 */
 export function box(size) {
@@ -43,29 +48,28 @@ export function box(size) {
   };
 }
 
-/** 竖直圆柱（半径 radius、高 height，中心在原点）。 */
+/** 竖直圆柱（半径 radius、高 height，轴沿 y，中心在原点）。 */
 export function cylinder(radius, height) {
   const h = height / 2;
   return (p) => {
-    const dRadial = Math.hypot(p[0], p[1]) - radius;
-    const dAxial = Math.abs(p[2]) - h;
+    const dRadial = Math.hypot(p[0], p[2]) - radius; // 径向距离在 xz 平面
+    const dAxial = Math.abs(p[1]) - h;                // 轴向沿 y
     const outside = Math.hypot(Math.max(dRadial, 0), Math.max(dAxial, 0));
     const inside = Math.min(Math.max(dRadial, dAxial), 0);
     return outside + inside;
   };
 }
 
-/** 竖直圆锥（底半径 radius、高 height，底面在 z=−h/2，顶点在 z=+h/2）。 */
+/** 竖直圆锥（底半径 radius、高 height；底面在 y=−h/2，顶点在 y=+h/2）。 */
 export function cone(radius, height) {
   const h = height / 2;
-  // 用「圆锥侧面」的隐式近似：以轴为基准的径向判定
   return (p) => {
-    const r = Math.hypot(p[0], p[1]);
-    const zNorm = (p[2] + h) / height;          // 0 在底面，1 在顶点
-    const rAllowed = radius * (1 - zNorm);      // 该高度处的允许半径
-    const dRadial = r - rAllowed;               // >0 在锥外
-    const dTop = p[2] - h;                      // >0 在顶点之上
-    const dBottom = -h - p[2];                  // >0 在底面之下
+    const r = Math.hypot(p[0], p[2]);
+    const yNorm = (p[1] + h) / height;          // 0 在底面，1 在顶点
+    const rAllowed = radius * (1 - yNorm);      // 该高度处的允许半径
+    const dRadial = r - rAllowed;
+    const dTop = p[1] - h;
+    const dBottom = -h - p[1];
     const outside = Math.hypot(Math.max(dRadial, 0), Math.max(dTop, 0), Math.max(dBottom, 0));
     const inside = Math.min(Math.max(dRadial, Math.max(dTop, dBottom)), 0);
     return outside + inside;
