@@ -1,0 +1,108 @@
+/* 图解样张预览页样式（结构由 js/preview-page.js 生成）
+ *
+ * 类名清单（改动请同步 preview-page.js 与 figure-preview.html）：
+ *   .preview-main        页面主体
+ *   .preview-intro/-label/-lede  标题区
+ *   .preview-grid        样张网格
+ *   .preview-card        单张样张（图 + 标题 + 说明）
+ *   .preview-card-stage  图形挂载点（固定高度，便于并排比较）
+ *   .preview-card-note   一句说明
+ *   .preview-card-error  渲染失败提示
+ *   .preview-note        页脚汇总
+ */
+
+.preview-main {
+  max-width: 1036px;
+  margin: 0 auto;
+  padding: clamp(24px, 4vw, 48px) var(--page-padding) 96px;
+}
+
+.preview-noscript {
+  margin: 0;
+  padding: 16px var(--page-padding);
+  color: var(--coral);
+  font-weight: 700;
+}
+
+.preview-intro { margin-bottom: clamp(20px, 3vw, 32px); }
+
+.preview-label {
+  margin: 0 0 6px;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.preview-intro h1 {
+  margin: 0 0 10px;
+  font-size: clamp(26px, 3.4vw, 38px);
+  line-height: 1.15;
+}
+
+.preview-lede {
+  margin: 0;
+  max-width: 64ch;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+/* ── 样张网格 ─────────────────────────────────────────────── */
+
+.preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: clamp(14px, 2vw, 22px);
+}
+
+.preview-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: clamp(14px, 2vw, 20px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  min-width: 0;
+}
+
+.preview-card-title {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+/* 固定高度：几张图并排时基线一致，便于比较画法 */
+.preview-card-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+  min-width: 0;
+}
+
+.preview-card-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.preview-card-error {
+  margin: 0;
+  color: var(--coral);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.preview-note {
+  margin: clamp(20px, 3vw, 30px) 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+@media (max-width: 700px) {
+  .preview-card-stage { min-height: 200px; }
+}
