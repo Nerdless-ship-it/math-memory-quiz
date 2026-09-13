@@ -681,6 +681,33 @@ export const FIGURE_KINDS                       // → Set<string> 白名单
 4. 固定 `viewBox`，`width: 100%` + `max-width`，保证 390 / 891 / 1440 三档都不横向溢出。
 5. 只画可见棱（消隐），被遮挡的棱用虚线，避免学生误读结构。
 
+### 7.3.1 `solid-builder.js` 契约（三视图搭建器：交互工具，不是题库）
+
+欢迎页的演示按钮分两类，由注册表的 `demo` 字段决定（渲染/控制代码不得出现科目 id）：
+
+| `demo` | 出现什么 | 模块 |
+| --- | --- | --- |
+| `'figure'` | 「看展开演示 / 看切割演示」：翻看题库图形并播放动画 | `fold-anim-view.js` |
+| `'builder'` | 「自己搭立体图形」：可交互的搭建器 | `solid-builder.js` |
+
+```js
+export function mountSolidBuilder(container, options)  // → { setCubes, getCubes, setTab, setMode, clear, view, root, destroy }
+export function renderSolidScene(cubes, { yaw, pitch, … })  // → SVGElement（每个可见面带命中信息）
+export function renderGridView(view, { cell, pad })         // → SVGElement（主/俯/左视图都是它）
+export function orbit(point, yawDeg, pitchDeg)              // 相机旋转（世界坐标 → 相机坐标）
+export function addCube / removeCube / neighborAcross       // 纯函数，越界与重复都是空操作
+export const MAX_SIZE = 4                                   // 4×4×4 上限：场景范围固定，加方块时画面不跳
+```
+
+三条设计约束：
+
+1. **几何全部复用 `three-views.js`**（同一套坐标与方向约定），搭建器只管画与交互——
+   否则「题目里的视图」和「搭建器里的视图」会各算一套，迟早不一致。
+2. **不复用 `fold-anim-view.js` 的相机**：那套是为折叠动画的纸面坐标（y 向下、z 离纸向上）
+   写的，直接借用会把 y/z 搞反；`orbit()` 用自己的基，并有单测断言 0/0 是恒等变换、旋转保长。
+3. **转动观察方向不改变三个视图**（视图由立体本身决定）。这条是搭建器的教学核心，
+   由 `test/solid-builder.test.mjs` 断言：拖动前后三个视图的渲染签名必须逐字相同。
+
 ### 7.4 `geometry.js` 契约（纯函数，可单测；不得触碰 DOM）
 
 ```js

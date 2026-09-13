@@ -1,0 +1,147 @@
+/* 三视图搭建器（结构由 public/js/solid-builder.js 生成）
+ *
+ * 类名清单（改动请同步 solid-builder.js）：
+ *   .builder            挂载点
+ *   .builder-toolbar    工具条：视图切换 / 加删模式 / 撤销清空
+ *   .builder-tab        立体图 / 主视图 / 俯视图 / 左视图（aria-pressed 表示选中）
+ *   .builder-mode       加方块 / 删方块
+ *   .builder-canvas     画布（拖动旋转；放大看某个视图时显示方格图）
+ *   .builder-ground     地面格子（点它在地面放方块）
+ *   .builder-face       立体上的一个可见面（点它往那一侧加方块）
+ *   .builder-strip      三个视图的实时缩略图
+ *   .builder-view-cell  视图里的小正方形（与 figure.css 同一种画法）
+ */
+
+.builder {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.builder-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.builder-tabs { display: flex; gap: 6px; margin-right: auto; }
+.builder-modes,
+.builder-actions { display: flex; gap: 6px; }
+
+.builder-tab,
+.builder-mode,
+.builder-action {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line, #dce3df);
+  border-radius: 6px;
+  color: var(--ink, #17231f);
+  background: white;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.builder-tab:hover,
+.builder-mode:hover,
+.builder-action:hover { border-color: #a9b7b1; background: var(--soft, #f2f5f3); }
+
+/* 选中态用实心绿：一眼看出「现在看的是哪个视图 / 加还是删」 */
+.builder-tab[aria-pressed='true'],
+.builder-mode[aria-pressed='true'] {
+  border-color: var(--green, #126b52);
+  color: white;
+  background: var(--green, #126b52);
+}
+
+.builder-canvas {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+  padding: 6px;
+  border: 1px solid var(--mint, #e3efe9);
+  border-radius: 10px;
+  background: var(--soft, #f6faf8);
+  cursor: grab;
+  touch-action: none; /* 触屏拖动用于旋转，不滚页面 */
+  user-select: none;
+}
+
+.builder-canvas:active { cursor: grabbing; }
+.builder-canvas:focus-visible { outline: 2px solid var(--green, #126b52); outline-offset: 2px; }
+
+.builder-ground {
+  fill: #f4f8f6;
+  stroke: #dbe6e1;
+  stroke-width: 1;
+  cursor: pointer;
+}
+
+.builder-ground:hover { fill: #e6f0eb; }
+
+.builder-face {
+  stroke: var(--ink, #17231f);
+  stroke-width: 1.3;
+  stroke-linejoin: round;
+  cursor: pointer;
+}
+
+.builder-face:hover { stroke: var(--green, #126b52); stroke-width: 2.2; }
+
+.builder-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
+.builder-strip-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.builder-strip-title { color: var(--muted, #66716d); font-size: 11px; }
+
+/* 空立体（刚清空）时三个视图位置的占位提示 */
+.builder-strip-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 8px;
+  border: 1px dashed var(--line, #dce3df);
+  border-radius: 6px;
+  color: var(--muted, #66716d);
+  font-size: 11px;
+}
+
+.builder-view-cell {
+  fill: #eef3f0;
+  stroke: var(--ink, #17231f);
+  stroke-width: 1.2;
+}
+
+.builder-status {
+  margin: 0;
+  color: var(--ink, #17231f);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.builder-hint,
+.builder-note {
+  margin: 0;
+  color: var(--muted, #66716d);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+@media (max-width: 760px) {
+  .builder-canvas { min-height: 200px; }
+}

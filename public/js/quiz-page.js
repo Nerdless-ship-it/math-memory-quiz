@@ -304,6 +304,64 @@ function setupFigureDemo(subject, nodes, items) {
   button.hidden = false;
 }
 
+/**
+ * 三视图搭建器：自己搭立体、实时看三个视图（注册表 `demo: 'builder'` 的科目才有）。
+ *
+ * 与图形演示（demo:'figure'）的区别：那个是「翻看题库里的图形 + 播放动画」，
+ * 这个是**交互工具**——用户点面加方块、转动观察方向、切换视图。
+ * 模块（几十 KB）同样在第一次点开时才 import。
+ */
+const BUILDER_DEMO = Object.freeze({
+  button: '自己搭立体图形',
+  note: '点面或地面加方块，拖动旋转观察方向；三个视图在下方实时跟着变。'
+});
+
+function setupBuilderDemo(subject, nodes) {
+  const button = nodes['figure-demo-button'];
+  const container = nodes['figure-demo'];
+  if (!button || !container) return;
+  if (subject?.demo !== 'builder') return; // 数据驱动：是否出现由注册表决定
+
+  button.textContent = BUILDER_DEMO.button;
+  let handle = null;
+
+  button.addEventListener('click', async () => {
+    if (!container.hidden) { // 收起：销毁搭建器，欢迎页恢复原样
+      container.hidden = true;
+      button.textContent = BUILDER_DEMO.button;
+      handle?.destroy?.();
+      handle = null;
+      return;
+    }
+    container.hidden = false;
+    button.textContent = '收起搭建器';
+    if (handle) return;
+
+    button.disabled = true;
+    try {
+      const module = await import('./solid-builder.js');
+      container.replaceChildren();
+      const note = document.createElement('p');
+      note.className = 'builder-note';
+      note.textContent = BUILDER_DEMO.note;
+      const body = document.createElement('div');
+      container.append(note, body);
+      handle = module.mountSolidBuilder(body, {});
+    } catch (error) {
+      // 失败不许静默：把原因写给用户（与图形演示同一处理）
+      container.replaceChildren();
+      const failed = document.createElement('p');
+      failed.className = 'figure-demo-error';
+      failed.textContent = `搭建器加载失败：${error?.message ?? error}`;
+      container.append(failed);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  button.hidden = false;
+}
+
 function showScreen(nodes, name) {
   const welcome = nodes.welcome;
   const quiz = nodes.quiz;
@@ -557,6 +615,7 @@ async function main() {
 
   renderSubjectChrome(subject, nodes, items.length);
   setupFigureDemo(subject, nodes, items);
+  setupBuilderDemo(subject, nodes);
 
   // 3) 装载引擎。
   const { createEngine, collectElements, error: engineError } = await loadEngine();

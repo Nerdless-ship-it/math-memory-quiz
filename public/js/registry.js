@@ -256,7 +256,10 @@ export const SUBJECTS = Object.freeze([
     // 只按选项判重会把那两道不同的题误判成重复。
     allowDuplicateFront: true,
     allowDuplicateBack: true,
-    uniqueBy: 'figure+choices'
+    uniqueBy: 'figure+choices',
+    // 欢迎页演示：quiz-page.js 见到该声明就显示「自己搭立体图形」，
+    // 打开一个可交互的搭建器（自己组合方块、实时看三个视图）——数据驱动，非硬编码
+    demo: 'builder'
   }
 ]);
 
