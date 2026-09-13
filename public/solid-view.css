@@ -16,6 +16,32 @@
   height: auto;
 }
 
+/* 切面轮廓：可见段实线、被立体自身遮住的段虚线。
+ *
+ * ⚠️ 这里换过两版错的表达，都是用户一句「立体图形怎么看着很奇怪」引出来的：
+ *   1. 只把「贴近切面的可见表面点」染色 ⇒ 曲面体上那些点连成一条弧线，
+ *      屏幕上是一条绿虚线横穿立体，像贴纸。
+ *   2. 对这些可见点求凸包 ⇒ 得到月牙（前半圈椭圆与轮廓之间那块），
+ *      因为椭圆后半圈没有可见表面点，会让人误以为「截面是月牙形」。
+ * 现在是解析算出的完整交线，再按可见性分段 —— 教材画切断面的标准画法。 */
+.solid-cut-visible {
+  fill: none;
+  stroke: var(--green, #126b52);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.solid-cut-hidden {
+  fill: none;
+  stroke: var(--green, #126b52);
+  stroke-width: 1.6;
+  stroke-dasharray: 5 4;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  opacity: 0.75;
+}
+
 /* 截面实体：浅色填充 + 深色描边，环与洞靠 evenodd 表达 */
 .section-solid-fill {
   fill: #dfe9e4;

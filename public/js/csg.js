@@ -116,6 +116,19 @@ function basisOf(planeNormal) {
 }
 
 /**
+ * 把 cut 面上的 2D 点还原成 3D 点。
+ * sectionLoops 返回的坐标是「相对平面原点的 (x, y)」，世界坐标 = origin + x·u + y·v，
+ * 其中 origin 是平面上离世界原点最近的点。渲染层要画 3D 中的切面轮廓时必须用它。
+ */
+export function planePointToWorld(planeNormal, d, x, y) {
+  const { u, v, n } = basisOf(planeNormal);
+  const origin = mul(n, d / (dot(n, n) || 1));
+  return add(origin, add(mul(u, x), mul(v, y)));
+}
+
+export { basisOf };
+
+/**
  * 在切割平面上对 sdf 采样，返回网格。
  * 采样点：P(u,v) = origin + u·U + v·V，其中 origin 是平面上离原点最近的点。
  */
