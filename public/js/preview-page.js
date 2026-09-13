@@ -13,6 +13,8 @@ const SAMPLES = Object.freeze([
   { kind: 'cube-reference', title: '立方体（画法样张）', note: '正面为正方形，深度沿 45° 半尺退出' },
   { kind: 'hollow-horizontal-cut', title: '空心圆柱 · 水平切', note: '截面是环，内部没有线（刀切到空心）' },
   { kind: 'oblique-cylinder-cut', title: '圆柱 · 斜切', note: '截面是椭圆，永远不是梯形' },
+  { kind: 'hollow-frustum-oblique-cut', title: '空心圆台 · 斜切', note: '截面是内外两个椭圆套成的环，内部没有线' },
+  { kind: 'cube-triangle-section', title: '正方体 · 三角形截面', note: '只能是锐角或直角三角形，切不出钝角三角形' },
   { kind: 'cube-with-square-hole', title: '正方体 · 方形通孔', note: '方洞是方的；斜着切才会变其他形状' }
 ]);
 

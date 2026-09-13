@@ -224,47 +224,54 @@ function buildCylinder(o) {
   const radius = Number.isFinite(o.radius) ? o.radius : 78;
   const height = Number.isFinite(o.height) ? o.height : 150;
   const ratio = Number.isFinite(o.cavityRatio) ? o.cavityRatio : 0;
+  // 锥度：顶面半径 / 底面半径。1 = 圆柱；<1 = 圆台（上小下大）。
+  // 复用同一套代码画圆台，避免为「上小下大」再写一份几乎相同的几何。
+  const taper = Number.isFinite(o.taper) ? o.taper : 1;
+  const topRadius = radius * taper;
   const inner = radius * ratio;
+  const innerTop = inner * taper;
 
   // 底面椭圆中心放在 y=0；世界坐标 y 向上，故顶面中心 cy = −height
   const { rx, ry } = projectedCircle(radius);
+  const topProj = projectedCircle(topRadius);
   const innerProj = projectedCircle(inner);
+  const innerTopProj = projectedCircle(innerTop);
   const topCenter = { x: 0, y: -height };
 
   const arcs = [];
   arcs.push({
-    // 侧面：左竖线 → 底弧 → 右竖线
-    d: `M${-rx},${topCenter.y}`
+    // 侧面：左斜线 → 底弧 → 右斜线（圆柱时左右是竖线，圆台时是斜线）
+    d: `M${-topProj.rx},${topCenter.y}`
       + `L${-rx},0`
       + `A${rx},${ry} 0 0 0 ${rx},0`
-      + `L${rx},${topCenter.y}`,
+      + `L${topProj.rx},${topCenter.y}`,
     fill: FILL_SIDE
   });
   arcs.push({
     // 顶面
-    d: `M${topCenter.x - rx},${topCenter.y}`
-      + `A${rx},${ry} 0 1 0 ${topCenter.x + rx},${topCenter.y}`
-      + `A${rx},${ry} 0 1 0 ${topCenter.x - rx},${topCenter.y}Z`,
+    d: `M${topCenter.x - topProj.rx},${topCenter.y}`
+      + `A${topProj.rx},${topProj.ry} 0 1 0 ${topCenter.x + topProj.rx},${topCenter.y}`
+      + `A${topProj.rx},${topProj.ry} 0 1 0 ${topCenter.x - topProj.rx},${topCenter.y}Z`,
     fill: FILL_TOP
   });
 
   if (inner > 0) {
     // 空腔开口：顶面上的内圈椭圆
     arcs.push({
-      d: `M${topCenter.x - innerProj.rx},${topCenter.y}`
-        + `A${innerProj.rx},${innerProj.ry} 0 1 0 ${topCenter.x + innerProj.rx},${topCenter.y}`
-        + `A${innerProj.rx},${innerProj.ry} 0 1 0 ${topCenter.x - innerProj.rx},${topCenter.y}Z`,
+      d: `M${topCenter.x - innerTopProj.rx},${topCenter.y}`
+        + `A${innerTopProj.rx},${innerTopProj.ry} 0 1 0 ${topCenter.x + innerTopProj.rx},${topCenter.y}`
+        + `A${innerTopProj.rx},${innerTopProj.ry} 0 1 0 ${topCenter.x - innerTopProj.rx},${topCenter.y}Z`,
       fill: '#ffffff'
     });
     // 内壁可见的那一段：从右端经椭圆**下方**绕到左端（近侧内壁）
     arcs.push({
-      d: `M${topCenter.x + innerProj.rx},${topCenter.y}`
-        + `A${innerProj.rx},${innerProj.ry} 0 0 0 ${topCenter.x - innerProj.rx},${topCenter.y}`,
+      d: `M${topCenter.x + innerTopProj.rx},${topCenter.y}`
+        + `A${innerTopProj.rx},${innerTopProj.ry} 0 0 0 ${topCenter.x - innerTopProj.rx},${topCenter.y}`,
       fill: null
     });
   }
 
-  return { arcs, topCenter, rx, ry, innerProj, inner, height };
+  return { arcs, topCenter, rx, ry, topProj, innerProj, innerTopProj, inner, height };
 }
 
 /**
@@ -387,11 +394,89 @@ export function renderCubeWithSquareHole(options = {}) {
   });
 }
 
+/**
+ * 空心圆台被斜切 —— 截面是内外两个椭圆套成的环。
+ *
+ * 这一张同时含两个易错点：**斜切得到的是椭圆（不是梯形）**，
+ * 以及**切到空心部分就不画内部那条线**。
+ */
+export function renderHollowFrustumObliqueCut(options = {}) {
+  const radius = Number.isFinite(options.radius) ? options.radius : 78;
+  const height = Number.isFinite(options.height) ? options.height : 150;
+  const ratio = Number.isFinite(options.cavityRatio) ? options.cavityRatio : 0.55;
+  return frameToSvg({
+    label: '空心圆台被斜切：截面是内外两个椭圆套成的环',
+    build: () => {
+      const t = buildCylinder({ radius, height, cavityRatio: ratio, taper: 0.6 });
+      const items = t.arcs.map((a) => ({ d: a.d, fill: a.fill }));
+      const cy = t.topCenter.y + height * 0.5;
+      items.push({
+        d: `M${-t.rx - 24},${cy + 24}L${t.topProj.rx + 30},${cy - 24}`,
+        fill: null, stroke: CUT_LINE, dash: true
+      });
+      // 截面：内外两个椭圆套成的环
+      const cx = t.rx + 140;
+      const outer = { rx: radius * 0.72 * Math.sqrt(1 + DEPTH_X * DEPTH_X), ry: radius * 0.58 * Math.abs(DEPTH_Y) };
+      const innerR = { rx: outer.rx * ratio, ry: outer.ry * ratio };
+      const ellipse = (c, r) => `M${c.x - r.rx},${c.y}`
+        + `A${r.rx},${r.ry} 0 1 0 ${c.x + r.rx},${c.y}`
+        + `A${r.rx},${r.ry} 0 1 0 ${c.x - r.rx},${c.y}Z`;
+      items.push({
+        d: `${ellipse({ x: cx, y: cy }, outer)} ${ellipse({ x: cx, y: cy }, innerR)}`,
+        fill: FILL_FRONT, evenodd: true
+      });
+      return items;
+    }
+  });
+}
+
+/**
+ * 正方体切不出钝角三角形 —— 只能是锐角或直角。
+ *
+ * 画法：立方体上画出那个**等腰直角三角形**的截面（切过一条棱并斜穿对面），
+ * 与右侧的截面图形对照。判断依据是「边长为正数的三角形，
+ * 三边取自 {棱长, 面对角线, 体对角线} 的平方，凑不出 a²+b²<c²」。
+ */
+export function renderCubeTriangleSection(options = {}) {
+  const size = Number.isFinite(options.size) ? options.size : 128;
+  return frameToSvg({
+    label: '正方体的三角形截面：只能是锐角或直角三角形，切不出钝角三角形',
+    build: () => {
+      const P = (x, y, z) => project([x * size, y * size, z * size]);
+      const items = [];
+      // 立方体三面
+      items.push({ points: [P(0, 0, 0), P(1, 0, 0), P(1, 1, 0), P(0, 1, 0)], fill: FILL_FRONT });
+      items.push({ points: [P(0, 1, 0), P(1, 1, 0), P(1, 1, 1), P(0, 1, 1)], fill: FILL_TOP });
+      items.push({ points: [P(1, 0, 0), P(1, 1, 0), P(1, 1, 1), P(1, 0, 1)], fill: FILL_SIDE });
+      // 可见轮廓
+      const edges = [
+        [P(0, 0, 0), P(1, 0, 0)], [P(1, 0, 0), P(1, 1, 0)], [P(1, 1, 0), P(0, 1, 0)],
+        [P(0, 1, 0), P(0, 0, 0)], [P(0, 0, 0), P(0, 0, 1)],
+        [P(1, 0, 0), P(1, 0, 1)], [P(1, 1, 0), P(1, 1, 1)],
+        [P(1, 0, 1), P(1, 1, 1)], [P(0, 0, 1), P(1, 0, 1)],
+        [P(0, 1, 0), P(0, 1, 1)], [P(0, 1, 1), P(1, 1, 1)]
+      ];
+      for (const [a, b] of edges) {
+        items.push({ d: `M${a.x.toFixed(1)},${a.y.toFixed(1)}L${b.x.toFixed(1)},${b.y.toFixed(1)}`, fill: null });
+      }
+      // 三角形截面：过顶点 (0,1,0)、(1,1,1)、(1,0,1) 的等腰直角三角形
+      const tri = [P(0, 1, 0), P(1, 1, 1), P(1, 0, 1)];
+      items.push({
+        d: `M${tri.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join('L')}Z`,
+        fill: CUT_FILL, stroke: CUT_LINE
+      });
+      return items;
+    }
+  });
+}
+
 export const SOLID_FIGURE_KINDS = Object.freeze(new Set([
   'cube-reference',
   'hollow-horizontal-cut',
   'oblique-cylinder-cut',
-  'cube-with-square-hole'
+  'cube-with-square-hole',
+  'hollow-frustum-oblique-cut',
+  'cube-triangle-section'
 ]));
 
 export function renderSolidFigure(kind, options = {}) {
@@ -400,6 +485,8 @@ export function renderSolidFigure(kind, options = {}) {
     case 'hollow-horizontal-cut': return renderHollowCylinderCut(options);
     case 'oblique-cylinder-cut': return renderObliqueCylinderCut(options);
     case 'cube-with-square-hole': return renderCubeWithSquareHole(options);
+    case 'hollow-frustum-oblique-cut': return renderHollowFrustumObliqueCut(options);
+    case 'cube-triangle-section': return renderCubeTriangleSection(options);
     default: throw new Error(`solid-figures: 未知图解类型 "${kind}"`);
   }
 }
