@@ -16,7 +16,8 @@
 // 实测拖动时只走第 2 层，可以做到跟手。
 
 import { sectionLoops } from './csg.js';
-import { renderSectionShape, cacheSurface } from './solid-view.js';
+import { renderSectionShape } from './solid-view.js';
+import { createPerspectiveView } from './solid-view3d.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const doc = () => globalThis.document;
@@ -74,20 +75,35 @@ const state = {
   tilt: 35,
   spin: 0,
   d: 0,
-  lesson: ''
+  lesson: '',
+  // 相机：yaw 绕竖直轴、pitch 抬降。默认从右上前方看，能同时看到顶面与侧面。
+  camYaw: 32,
+  camPitch: 20
 };
 
-let surfaceCache = null;
-let surfaceKey = '';
+let perspectiveView = null;
+let perspectiveKey = '';
 let pending = false;
 
 const normalize = (v) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
 
-/** 由 tilt / spin 求切面法向：tilt=0 水平，tilt=90 竖直。 */
+/**
+ * 由 tilt / spin 求切面法向：tilt=0 水平切，tilt=90 竖直切。
+ *
+ * ⚠️ 基本体的轴是 **y 向上**（见 csg.js 的坐标约定说明），所以「水平切」的法向是 (0,1,0)。
+ * 早先按 z 向上写成 (sin·cos, sin·sin, cos)，换了 y-up 之后**没跟着改**，
+ * 于是滑块写着「0° 水平切」实际做的是竖直切——截面从环变成两块矩形。
+ * 是给 csg 补的「任意倾角」回归测试把它暴露出来的（那个测试一开始也写错了法向，
+ * 两处同一个根因）。改坐标约定时，**所有根据轴推导法向的地方都要一起改**。
+ */
 function planeNormal() {
   const tilt = (state.tilt * Math.PI) / 180;
   const spin = (state.spin * Math.PI) / 180;
-  return normalize([Math.sin(tilt) * Math.cos(spin), Math.sin(tilt) * Math.sin(spin), Math.cos(tilt)]);
+  return normalize([
+    Math.sin(tilt) * Math.cos(spin),
+    Math.cos(tilt),
+    Math.sin(tilt) * Math.sin(spin)
+  ]);
 }
 
 function currentSolid() {
@@ -100,44 +116,49 @@ function currentPreset() {
 }
 
 // ── 渲染 ────────────────────────────────────────────────────────────
+//
+// 立体视图走**真 3D 透视**（solid-view3d.js），不再是斜二测。
+// 原因：斜二测把三维沿固定方向压平，切开处的前后两半在屏幕上几乎重叠，
+// 表达不出「一刀切开露出切口」；而沙盒的核心就是让人看懂三维关系。
+// 截面图仍用精确的解析轮廓（renderSectionShape），它本来就是平面图形。
 
-/**
- * 立体层：只在立体或视角变化时重算，并缓存表面点。
- * 返回缓存对象，供切面层复用。
- */
-function ensureSurfaceCache() {
-  const key = `${state.solidId}|${computeExtent()}`;
-  if (surfaceCache && surfaceKey === key) return surfaceCache;
-  surfaceCache = cacheSurface(currentSolid(), { extent: computeExtent(), resolution: 150, scale: 62 });
-  surfaceKey = key;
-  return surfaceCache;
-}
-
-/** 采样平面需要覆盖的范围：按立体预设给一个够用的窗口。 */
-function computeExtent() {
-  switch (state.solidId) {
-    case 'cube': return 1.9;
-    case 'sphere': return 1.6;
-    case 'cube-hole': return 1.9;
-    default: return 1.8;
-  }
+/** 网格只在「换立体 / 转视角」时重算；拖动切面时只重排颜色与切面多边形。 */
+function ensurePerspectiveView() {
+  const key = `${state.solidId}|${Math.round(state.camYaw)}|${Math.round(state.camPitch)}`;
+  if (perspectiveView && perspectiveKey === key) return perspectiveView;
+  perspectiveView = createPerspectiveView(currentSolid(), {
+    width: 360,
+    height: 340,
+    cols: 150,   // 采样密度：150 已是清晰度与构建耗时（~60ms）的平衡点
+    rows: 142,
+    yawDeg: state.camYaw,
+    pitchDeg: state.camPitch,
+    distance: 6.4,
+    fovDeg: 34
+  });
+  perspectiveKey = key;
+  return perspectiveView;
 }
 
 function renderSolidView() {
   const host = doc().querySelector('#sandbox-solid');
-  const cache = ensureSurfaceCache();
-  const svg = cache.toSvg({ planeNormal: planeNormal(), planeD: state.d, showCut: true, width: 300, height: 280 });
-  host.replaceChildren(svg);
+  const view = ensurePerspectiveView();
+  host.replaceChildren(view.render({
+    planeNormal: planeNormal(),
+    planeD: state.d,
+    showCut: true,
+    ariaLabel: '组合立体的三维透视图，绿色是切面'
+  }));
 }
 
 function renderSectionView() {
   const host = doc().querySelector('#sandbox-section');
   const { svg, result } = renderSectionShape(currentSolid(), planeNormal(), state.d, {
-    extent: computeExtent() + 0.2,
+    extent: 2.4,
     resolution: 200,
-    width: 280,
-    height: 260,
-    scale: 62
+    width: 300,
+    height: 280,
+    scale: 66
   });
   host.replaceChildren(svg);
   return result;
@@ -260,9 +281,64 @@ function buildControls() {
     state.spin = 0;
     state.d = 0;
     state.lesson = '';
+    state.camYaw = 32;
+    state.camPitch = 20;
     syncControls();
     renderAll();
   });
+
+  bindOrbit();
+}
+
+/**
+ * 拖拽转视角、滚轮缩放。
+ *
+ * 透视渲染下转视角才有意义——这是它相对斜二测的主要收益：
+ * 学生可以把立体转到一个能看清切面与前后的角度。
+ * 拖动只改相机，**不改立体本身**，所以截面形状不变（这本身也是个可讲的点）。
+ */
+function bindOrbit() {
+  const host = doc().querySelector('#sandbox-solid');
+  if (!host) return;
+
+  let dragging = false;
+  let lastX = 0;
+  let lastY = 0;
+
+  const onDown = (event) => {
+    dragging = true;
+    lastX = event.clientX;
+    lastY = event.clientY;
+    host.dataset.dragging = '1';
+    // 指针捕获：拖出画布也不丢失事件
+    host.setPointerCapture?.(event.pointerId);
+  };
+  const onMove = (event) => {
+    if (!dragging) return;
+    const dx = event.clientX - lastX;
+    const dy = event.clientY - lastY;
+    lastX = event.clientX;
+    lastY = event.clientY;
+    state.camYaw = (state.camYaw - dx * 0.5 + 360) % 360;
+    // pitch 夹在 ±78°：接近 ±90° 时相机的 up 向量会退化，画面会翻转
+    state.camPitch = Math.max(-78, Math.min(78, state.camPitch + dy * 0.4));
+    scheduleRender(true);
+  };
+  const onUp = (event) => {
+    dragging = false;
+    delete host.dataset.dragging;
+    host.releasePointerCapture?.(event.pointerId);
+  };
+
+  host.addEventListener('pointerdown', onDown);
+  host.addEventListener('pointermove', onMove);
+  host.addEventListener('pointerup', onUp);
+  host.addEventListener('pointercancel', onUp);
+  host.addEventListener('wheel', (event) => {
+    event.preventDefault();
+    state.camPitch = Math.max(-78, Math.min(78, state.camPitch + Math.sign(event.deltaY) * 2));
+    scheduleRender(true);
+  }, { passive: false });
 }
 
 function main() {
