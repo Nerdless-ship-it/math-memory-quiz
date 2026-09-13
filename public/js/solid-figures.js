@@ -1,29 +1,45 @@
-﻿// 几何易错点图解（B 方案：精确、干净的 2D 矢量画法）。
+// 几何易错点图解（B 方案：精确、干净的 2D 矢量画法）。
 //
-// ── 为什么是这个方案 ─────────────────────────────────────────────────
-// 之前做过一个「切面沙盒」（自由拖角度、实时看截面），技术上能跑，
-// 但它是**几何实验室**，而这个 App 是**记忆训练**——用户来这是为了刷题和记东西，
-// 不是为了玩几何。方向不对，所以整块删掉了（见 commit 074d221）。
+// ── 画法与参考样张对齐（这一版重画的原因）────────────────────────────
+// 用户给了一张标准**斜投影（cavalier）**立方体做样张：
+//   正面 = **真正的正方形**，完全不变形；
+//   深度沿 45° 斜向、**1:1 足尺**。
+// 实测参考图：正面 (150,118)-(283,250) 即 133×132 的正方形，
+// 顶面右上角 (380,45) ⇒ 深度向量 (97,-73)，约为边长的 (0.73,-0.55)（长约 0.91、仰角约 37°）。
 //
-// 现在改成：**把常考的易错点画成干净、精确的静态图**，一张图讲清一件事。
-// 画法与 figure.js 的静态图一致（斜二测 + 同一套配色），所以放在题库里毫无违和。
+// 我上一版用的是「深度收缩 0.5/0.33」的近似，又配了居中椭圆和灰调小字，
+// 整体发糊、不像样张。现在统一到**足尺斜投影 + 细黑线 + 淡色填充**：
+// 干净、清楚，和参考图同一种画法。
 //
-// ── 与 figure.js 的关系 ──────────────────────────────────────────────
-// 本文件**只画易错点讲解图**，不出题；figure.js 负责题干与选项。
-// 两者都用斜二测，视觉语言一致但各自独立（figure.js 的 createSvg 是模块私有的，
-// 且它正被并行开发改动，所以这里自带一份最小实现，不去 import 它的内部函数）。
+// ── 为什么圆柱的顶面画成椭圆是对的 ──────────────────────────────────
+// 斜投影下，法向为 (0,-1,0) 的圆投影后是**椭圆**（因为投影依赖 y 坐标）。
+// 只有**正对观察者的圆**（法向沿深度方向）才投影成圆。
+// 所以椭圆的顶面不是偷懒，是这种投影的必然结果。
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
-/** 斜二测投影：正面不变形，深度往右上收缩（与 figure.js 的 0.5 / 0.33 相同）。 */
-const DEPTH_X = 0.5;
-const DEPTH_Y = 0.33;
+// ── 斜投影参数：**斜二测（cabinet）**────────────────────────────────
+// 正面不变形，深度取**半尺**、方向 45°。这是教材/考公图的标准画法，也才读得出「等边」。
+//
+// 注意别照抄用户那张参考图的实测比例：那张正面 133×132，深度向量 (97,−73) 即 0.73 倍边长，
+// 按那个比例画出来的立方体**看起来是长方体**（我照抄后就是这样）。
+// 参考图本身是个略扁的盒子，不是标准立方体。
+const OBLIQUE_ANGLE_DEG = 45;
+const OBLIQUE_SCALE = 0.5;
+const DEPTH_X = OBLIQUE_SCALE * Math.cos((OBLIQUE_ANGLE_DEG * Math.PI) / 180);
+const DEPTH_Y = -OBLIQUE_SCALE * Math.sin((OBLIQUE_ANGLE_DEG * Math.PI) / 180);
+
+/** 世界坐标 → 屏幕。x 右、y 上、z 朝观察者（z 增大表示往观察者方向出来）。 */
+function project([x, y, z]) {
+  return { x: x + z * DEPTH_X, y: -y + z * DEPTH_Y };
+}
 
 const INK = '#17231f';
-const FACE_LIGHT = '#e8eeea';
-const FACE_MID = '#cfdcd6';
-const CUT_FILL = 'rgba(18, 107, 82, 0.20)';
+const FILL_FRONT = '#e8eeea';
+const FILL_TOP = '#dfe7e2';
+const FILL_SIDE = '#cfdcd6';
 const CUT_LINE = '#126b52';
+const CUT_FILL = 'rgba(18, 107, 82, 0.16)';
 const MUTED = '#66716d';
 
 function svgElement(tagName, attributes = {}, text) {
@@ -45,336 +61,126 @@ function createSvg({ width, height, label, children }) {
     'aria-label': label,
     class: 'figure-svg'
   });
-  svg.style.maxWidth = `${width}px`;
+  // ⚠️ 必须给**具体像素宽度**，不能只给 width:100% + aspect-ratio：
+  // 放在 flex 容器里（本模块的预览与题库排版都是）时，100% 会解析成 0，
+  // 整个 SVG 塌成不可见——实测就是一片空白，而 DOM 里图形元素全都在、viewBox 也正常。
+  // 用 min(宽度上限, 100%) 兼顾「不超出容器」与「有确定尺寸」。
+  svg.style.width = `min(${width}px, 100%)`;
+  svg.style.height = 'auto';
   svg.style.aspectRatio = `${width} / ${height}`;
   for (const child of children) svg.append(child);
   return svg;
 }
 
-// ── 绘制一个「立着的圆柱 / 空心圆柱」──────────────────────────────────
-//
-// 坐标系：世界坐标 y 向上、半径在 xz 平面。
-// 斜二测把 z（朝观察者）投到屏幕的右上方向，于是底面与顶面都画成椭圆。
-//
-// 关键量（屏幕单位）：
-//   rx = 半径的水平半轴
-//   ry = 半径的竖直半轴（= rx * DEPTH_Y 的视觉效果，取 0.42 让椭圆看起来自然）
-//   zx = 深度带来的水平偏移 = rx * DEPTH_X
+const SHARP = {
+  stroke: INK,
+  'stroke-width': 1.6,
+  'stroke-linejoin': 'round',
+  'stroke-linecap': 'round',
+  fill: 'none'
+};
 
-const ELLIPSE_RY_RATIO = 0.42;
+const toPath = (pts) => `M${pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join('L')}`;
+const closedPath = (pts) => `${toPath(pts)}Z`;
 
 /**
- * 圆柱的可见轮廓：侧面（两条竖线 + 上下椭圆弧）+ 顶面椭圆。
- * @returns {{ top: object, bottom: object, left: number, right: number, topY: number, bottomY: number }}
+ * 立方体（棱长 size，一角在原点，往 +x / +y / −z 展开）。
+ * 可见三面：front（正对观察者的正方形）、top、right —— 与参考样张完全同构。
  */
-function cylinderGeometry(cx, cy, radiusPx, heightPx) {
-  const rx = radiusPx;
-  const ry = radiusPx * ELLIPSE_RY_RATIO;
-  const zx = radiusPx * DEPTH_X;
+function cubeGeometry(origin, size) {
+  const [ox, oy, oz] = origin;
+  const P = (x, y, z) => project([ox + x * size, oy + y * size, oz + z * size]);
+  const front = [P(0, 0, 0), P(1, 0, 0), P(1, 1, 0), P(0, 1, 0)];
+  const top = [P(0, 1, 0), P(1, 1, 0), P(1, 1, 1), P(0, 1, 1)];
+  const right = [P(1, 0, 0), P(1, 1, 0), P(1, 1, 1), P(1, 0, 1)];
   return {
-    cx,
-    cy,
-    rx,
-    ry,
-    zx,
-    // 顶面椭圆的中心（往上抬 height，再往右上偏 zx 表示深度）
-    topCx: cx + zx,
-    topCy: cy - heightPx,
-    bottomCx: cx,
-    bottomCy: cy
+    front, top, right,
+    // 可见轮廓：正面下/右/左三条边 + 三条深度边 + 顶面与右面之间那条
+    outline: [
+      [P(0, 0, 0), P(1, 0, 0), P(1, 0, 1)],
+      [P(1, 0, 0), P(1, 1, 0), P(1, 1, 1)],
+      [P(1, 1, 0), P(0, 1, 0), P(0, 1, 1)],
+      [P(0, 1, 1), P(1, 1, 1)],
+      [P(1, 1, 1), P(1, 0, 1)],
+      [P(0, 1, 0), P(0, 1, 1)]
+    ],
+    P,
+    visibleEdges: { front, top, right }
   };
 }
 
-/** 椭圆形路径（用于顶/底面）。 */
-function ellipsePath({ cx, cy, rx, ry }) {
-  return `M${cx - rx},${cy}`
-    + `a${rx},${ry} 0 1,0 ${rx * 2},0`
-    + `a${rx},${ry} 0 1,0 ${-rx * 2},0Z`;
-}
-
 /**
- * 画一个「外圈椭圆挖掉内圈椭圆」的环（用 fill-rule: evenodd 一次成型）。
- * 空心圆柱的顶面、以及「切到空心」的截面都是这个形状。
- */
-function ringPath(outer, inner) {
-  return `${ellipsePath(outer)} ${ellipsePath(inner)}`;
-}
-
-// ── 易错点图解 ──────────────────────────────────────────────────────
-
-/**
- * 空心圆柱被**水平平面**所截 —— 截面是不带内部线的环。
+ * 以「世界原点在角落」的简单坐标画好图形，再用 **viewBox 平移**把它框住。
  *
- * 这是「刀切空心部分不带线」最直接的一张图：左边切开，右边只有外圈与内圈，
- * 空腔内部**没有任何线**。
+ * ⚠️ 不再去算「原点的绝对位置」——那个办法我连错三次符号（project() 返回的是屏幕
+ * 坐标，而 origin 加在世界坐标上，x 与 y 的符号方向相反），每次都是
+ * 「DOM 里元素齐全、viewBox 正常、fill 正常，但画面一片空白」。
+ * 改成先按最朴素的坐标画（原点就在 0,0），量出包围盒后只调 viewBox：
+ * viewBox 的 min-x/min-y 天生就是「把哪个角落对到画布左上」，
+ * 一个减号都不会错。
  */
-export function renderHollowCylinderCut(options = {}) {
-  const width = 380;
-  const height = 230;
-  const radius = Number.isFinite(options.radius) ? options.radius : 52;
-  const barHeight = Number.isFinite(options.solidHeight) ? options.solidHeight : 96;
-  const cavityRatio = Number.isFinite(options.cavityRatio) ? options.cavityRatio : 0.52;
+function frameToSvg({ label, build, padding = 24 }) {
+  // 先用朴素坐标画一次，量包围盒
+  const probe = build();
+  const all = [];
+  for (const item of probe) {
+    if (item.points) all.push(...item.points);
+  }
+  const minX = Math.min(...all.map((p) => p.x));
+  const maxX = Math.max(...all.map((p) => p.x));
+  const minY = Math.min(...all.map((p) => p.y));
+  const maxY = Math.max(...all.map((p) => p.y));
+  const width = maxX - minX + padding * 2;
+  const height = maxY - minY + padding * 2;
 
-  const children = [];
-  const geo = cylinderGeometry(96, 168, radius, barHeight);
-  const inner = radius * cavityRatio;
-
-  // 顶面：环（外圈椭圆挖内圈）
-  children.push(svgElement('path', {
-    d: `${ellipsePath({ cx: geo.topCx, cy: geo.topCy, rx: geo.rx, ry: geo.ry })} `
-      + `${ellipsePath({ cx: geo.topCx, cy: geo.topCy, rx: inner, ry: inner * ELLIPSE_RY_RATIO })}`,
-    fill: FACE_LIGHT,
-    stroke: INK,
-    'stroke-width': 1.5,
-    'fill-rule': 'evenodd'
+  // 真实绘制一次（坐标不变，只挪 viewBox）
+  const children = build().map((item) => svgElement('path', {
+    d: item.points ? closedPath(item.points) : item.d,
+    ...(item.fill ? { fill: item.fill } : { fill: 'none' }),
+    ...SHARP
   }));
 
-  // 侧面：外轮廓（两竖线 + 底弧）
-  children.push(svgElement('path', {
-    d: `M${geo.cx - geo.rx},${geo.bottomCy}`
-      + `L${geo.topCx - geo.rx},${geo.topCy}`
-      + `A${geo.rx},${geo.ry} 0 0 1 ${geo.topCx + geo.rx},${geo.topCy}`
-      + `L${geo.cx + geo.rx},${geo.bottomCy}`
-      + `A${geo.rx},${geo.ry} 0 0 1 ${geo.cx - geo.rx},${geo.bottomCy}Z`,
-    fill: FACE_MID,
-    stroke: INK,
-    'stroke-width': 1.5
-  }));
-
-  // 空腔的可见内壁（顶面开口处往下一点点，表示这是个通孔）
-  children.push(svgElement('path', {
-    d: `M${geo.topCx - inner},${geo.topCy}`
-      + `A${inner},${inner * ELLIPSE_RY_RATIO} 0 0 0 ${geo.topCx + inner},${geo.topCy}`,
-    fill: 'none',
-    stroke: INK,
-    'stroke-width': 1.2
-  }));
-
-  // 切面位置：一条水平线横过立体
-  const planeY = geo.topCy + barHeight * 0.5;
-  children.push(svgElement('line', {
-    x1: geo.cx - geo.rx - 16, y1: planeY,
-    x2: geo.cx + geo.rx + 16, y2: planeY,
-    stroke: CUT_LINE, 'stroke-width': 2, 'stroke-dasharray': '7 4'
-  }));
-
-  // ── 右侧：截面图形 ──
-  const shapeCx = 268;
-  const shapeCy = 118;
-  const shapeR = radius;
-  children.push(svgElement('path', {
-    d: `${ellipsePath({ cx: shapeCx, cy: shapeCy, rx: shapeR, ry: shapeR * ELLIPSE_RY_RATIO })} `
-      + `${ellipsePath({ cx: shapeCx, cy: shapeCy, rx: inner, ry: inner * ELLIPSE_RY_RATIO })}`,
-    fill: FACE_LIGHT,
-    stroke: INK,
-    'stroke-width': 1.6,
-    'fill-rule': 'evenodd'
-  }));
-
-  children.push(svgElement('text', {
-    x: shapeCx, y: shapeCy + shapeR * ELLIPSE_RY_RATIO + 34,
-    'text-anchor': 'middle', fill: CUT_LINE, 'font-size': 13, 'font-weight': 700
-  }, '截面：环，内部没有线'));
-
-  children.push(svgElement('text', {
-    x: 96, y: 214, 'text-anchor': 'middle', fill: MUTED, 'font-size': 12
-  }, '刀切到空心部分'));
-
-  return createSvg({ width, height, label: '空心圆柱被水平平面所截：截面是一个环，内部没有线', children });
+  const svg = svgElement('svg', {
+    viewBox: `${(minX - padding).toFixed(1)} ${(minY - padding).toFixed(1)} ${width.toFixed(1)} ${height.toFixed(1)}`,
+    width: '100%',
+    preserveAspectRatio: 'xMidYMid meet',
+    role: 'img',
+    'aria-label': label,
+    class: 'figure-svg'
+  });
+  svg.style.width = `min(${Math.round(width)}px, 100%)`;
+  svg.style.height = 'auto';
+  svg.style.aspectRatio = `${Math.round(width)} / ${Math.round(height)}`;
+  for (const child of children) svg.append(child);
+  return svg;
 }
 
 /**
- * 空心圆柱被**倾斜平面**所截 —— 截面是内外两个椭圆组成的环，内部同样没有线。
- *
- * 这也是「斜切圆柱得到椭圆」与「空心不带线」两条规则的叠加。
+ * 参考样张：一个干净的立方体（正面正方形 + 45° 退出的深度），
+ * 与用户给的那张图完全同构。这张对上，才谈得上后面的图解也对齐。
  */
-export function renderHollowObliqueCut(options = {}) {
-  const width = 380;
-  const height = 240;
-  const radius = Number.isFinite(options.radius) ? options.radius : 52;
-  const barHeight = Number.isFinite(options.solidHeight) ? options.solidHeight : 96;
-  const cavityRatio = Number.isFinite(options.cavityRatio) ? options.cavityRatio : 0.52;
-  const tilt = Number.isFinite(options.tiltDeg) ? options.tiltDeg : 32;
-
-  const children = [];
-  const geo = cylinderGeometry(96, 176, radius, barHeight);
-  const inner = radius * cavityRatio;
-
-  // 顶面环
-  children.push(svgElement('path', {
-    d: `${ellipsePath({ cx: geo.topCx, cy: geo.topCy, rx: geo.rx, ry: geo.ry })} `
-      + `${ellipsePath({ cx: geo.topCx, cy: geo.topCy, rx: inner, ry: inner * ELLIPSE_RY_RATIO })}`,
-    fill: FACE_LIGHT, stroke: INK, 'stroke-width': 1.5, 'fill-rule': 'evenodd'
-  }));
-  // 侧面
-  children.push(svgElement('path', {
-    d: `M${geo.cx - geo.rx},${geo.bottomCy}`
-      + `L${geo.topCx - geo.rx},${geo.topCy}`
-      + `A${geo.rx},${geo.ry} 0 0 1 ${geo.topCx + geo.rx},${geo.topCy}`
-      + `L${geo.cx + geo.rx},${geo.bottomCy}`
-      + `A${geo.rx},${geo.ry} 0 0 1 ${geo.cx - geo.rx},${geo.bottomCy}Z`,
-    fill: FACE_MID, stroke: INK, 'stroke-width': 1.5
-  }));
-  // 内壁
-  children.push(svgElement('path', {
-    d: `M${geo.topCx - inner},${geo.topCy}`
-      + `A${inner},${inner * ELLIPSE_RY_RATIO} 0 0 0 ${geo.topCx + inner},${geo.topCy}`,
-    fill: 'none', stroke: INK, 'stroke-width': 1.2
-  }));
-
-  // 倾斜的切面：一条斜线
-  const planeCy = geo.topCy + barHeight * 0.52;
-  const halfW = geo.rx + 14;
-  const slope = Math.tan((tilt * Math.PI) / 180);
-  children.push(svgElement('line', {
-    x1: geo.cx - halfW, y1: planeCy + halfW * slope * 0.42,
-    x2: geo.cx + halfW, y2: planeCy - halfW * slope * 0.42,
-    stroke: CUT_LINE, 'stroke-width': 2, 'stroke-dasharray': '7 4'
-  }));
-
-  // 截面：内外两个椭圆（外椭圆更扁长，因为斜切）
-  const shapeCx = 268;
-  const shapeCy = 120;
-  const outerRx = radius * 1.22;
-  const innerRx = inner * 1.22;
-  children.push(svgElement('path', {
-    d: `${ellipsePath({ cx: shapeCx, cy: shapeCy, rx: outerRx, ry: outerRx * ELLIPSE_RY_RATIO * 0.82 })} `
-      + `${ellipsePath({ cx: shapeCx, cy: shapeCy, rx: innerRx, ry: innerRx * ELLIPSE_RY_RATIO * 0.82 })}`,
-    fill: FACE_LIGHT, stroke: INK, 'stroke-width': 1.6, 'fill-rule': 'evenodd'
-  }));
-  children.push(svgElement('text', {
-    x: shapeCx, y: shapeCy + outerRx * ELLIPSE_RY_RATIO * 0.82 + 34,
-    'text-anchor': 'middle', fill: CUT_LINE, 'font-size': 13, 'font-weight': 700
-  }, '截面：两个椭圆套成的环'));
-
-  children.push(svgElement('text', {
-    x: 96, y: 226, 'text-anchor': 'middle', fill: MUTED, 'font-size': 12
-  }, '斜切空心圆柱'));
-
-  return createSvg({ width, height, label: '空心圆柱被倾斜平面所截：截面是内外两个椭圆组成的环', children });
-}
-
-/**
- * 对照图：同一个空心圆台，「刀切到空心」与「刀没切到空心」的区别。
- *
- * 这是最容易被记混的一对——**带不带线只取决于这一刀有没有切到空心**，
- * 与立体本身长什么样无关。所以并排画出来最有效。
- */
-export function renderHollowVsSolidCut(options = {}) {
-  const width = 400;
-  // ⚠️ 高度要算够：立体本身占到 y≈195，下面还要放两个截面图。
-  // 原稿写 240，而截面中心被放在 y=236 ⇒ 直接画到画布外、被裁掉。这里给 300。
-  const height = 300;
-  const radius = Number.isFinite(options.radius) ? options.radius : 44;
-  const barHeight = Number.isFinite(options.solidHeight) ? options.solidHeight : 84;
-  const cavityRatio = Number.isFinite(options.cavityRatio) ? options.cavityRatio : 0.5;
-
-  const children = [];
-  const inner = radius * cavityRatio;
-  const shapeCy = 246;          // 两个截面图的中心（放在立体下方）
-  const shapeR = radius * 0.6;
-
-  // ── 左：刀切到空心（切面在空腔范围内）──
-  const leftCx = 88;
-  const leftBase = 172;
-  const left = cylinderGeometry(leftCx, leftBase, radius, barHeight);
-  children.push(svgElement('path', {
-    d: `${ellipsePath({ cx: left.topCx, cy: left.topCy, rx: left.rx, ry: left.ry })} `
-      + `${ellipsePath({ cx: left.topCx, cy: left.topCy, rx: inner, ry: inner * ELLIPSE_RY_RATIO })}`,
-    fill: FACE_LIGHT, stroke: INK, 'stroke-width': 1.4, 'fill-rule': 'evenodd'
-  }));
-  children.push(svgElement('path', {
-    d: `M${left.cx - left.rx},${left.bottomCy}`
-      + `L${left.topCx - left.rx},${left.topCy}`
-      + `A${left.rx},${left.ry} 0 0 1 ${left.topCx + left.rx},${left.topCy}`
-      + `L${left.cx + left.rx},${left.bottomCy}`
-      + `A${left.rx},${left.ry} 0 0 1 ${left.cx - left.rx},${left.bottomCy}Z`,
-    fill: FACE_MID, stroke: INK, 'stroke-width': 1.4
-  }));
-  children.push(svgElement('path', {
-    d: `M${left.topCx - inner},${left.topCy}`
-      + `A${inner},${inner * ELLIPSE_RY_RATIO} 0 0 0 ${left.topCx + inner},${left.topCy}`,
-    fill: 'none', stroke: INK, 'stroke-width': 1.1
-  }));
-  const leftPlaneY = left.topCy + barHeight * 0.62;
-  children.push(svgElement('line', {
-    x1: left.cx - left.rx - 12, y1: leftPlaneY, x2: left.cx + left.rx + 12, y2: leftPlaneY,
-    stroke: CUT_LINE, 'stroke-width': 2, 'stroke-dasharray': '6 4'
-  }));
-  children.push(svgElement('text', {
-    x: leftCx, y: 208, 'text-anchor': 'middle', fill: CUT_LINE, 'font-size': 12.5, 'font-weight': 700
-  }, '切到空心 ⇒ 不带线'));
-
-  // 左图截面：环
-  const leftShapeCx = 88;
-  const leftShapeCy = shapeCy;
-  children.push(svgElement('path', {
-    d: `${ellipsePath({ cx: leftShapeCx, cy: leftShapeCy, rx: shapeR, ry: shapeR * ELLIPSE_RY_RATIO })} `
-      + `${ellipsePath({ cx: leftShapeCx, cy: leftShapeCy, rx: inner / radius * shapeR, ry: inner / radius * shapeR * ELLIPSE_RY_RATIO })}`,
-    fill: FACE_LIGHT, stroke: INK, 'stroke-width': 1.4, 'fill-rule': 'evenodd'
-  }));
-
-  // ── 右：刀没切到空心（切面在空腔之上，是实心圆盘）──
-  const rightCx = 300;
-  const rightBase = 172;
-  const right = cylinderGeometry(rightCx, rightBase, radius, barHeight);
-  children.push(svgElement('path', {
-    d: ellipsePath({ cx: right.topCx, cy: right.topCy, rx: right.rx, ry: right.ry }),
-    fill: FACE_LIGHT, stroke: INK, 'stroke-width': 1.4
-  }));
-  children.push(svgElement('path', {
-    d: `M${right.cx - right.rx},${right.bottomCy}`
-      + `L${right.topCx - right.rx},${right.topCy}`
-      + `A${right.rx},${right.ry} 0 0 1 ${right.topCx + right.rx},${right.topCy}`
-      + `L${right.cx + right.rx},${right.bottomCy}`
-      + `A${right.rx},${right.ry} 0 0 1 ${right.cx - right.rx},${right.bottomCy}Z`,
-    fill: FACE_MID, stroke: INK, 'stroke-width': 1.4
-  }));
-  // 空腔只在下方可见（虚线提示它在下面）
-  children.push(svgElement('path', {
-    d: `M${right.topCx - inner},${right.topCy + barHeight * 0.42}`
-      + `A${inner},${inner * ELLIPSE_RY_RATIO} 0 0 0 ${right.topCx + inner},${right.topCy + barHeight * 0.42}`,
-    fill: 'none', stroke: MUTED, 'stroke-width': 1.1, 'stroke-dasharray': '4 3'
-  }));
-  const rightPlaneY = right.topCy + barHeight * 0.16;
-  children.push(svgElement('line', {
-    x1: right.cx - right.rx - 12, y1: rightPlaneY, x2: right.cx + right.rx + 12, y2: rightPlaneY,
-    stroke: CUT_LINE, 'stroke-width': 2, 'stroke-dasharray': '6 4'
-  }));
-  children.push(svgElement('text', {
-    x: rightCx, y: 208, 'text-anchor': 'middle', fill: CUT_LINE, 'font-size': 12.5, 'font-weight': 700
-  }, '没切到空心 ⇒ 实心圆'));
-
-  children.push(svgElement('path', {
-    d: ellipsePath({ cx: rightCx, cy: leftShapeCy, rx: shapeR, ry: shapeR * ELLIPSE_RY_RATIO }),
-    fill: FACE_LIGHT, stroke: INK, 'stroke-width': 1.4
-  }));
-
-  return createSvg({
-    width,
-    height,
-    label: '对照图：刀切到空心时截面不带线，没切到空心时截面是实心圆',
-    children
+export function renderCubeReference(options = {}) {
+  const size = Number.isFinite(options.size) ? options.size : 118;
+  return frameToSvg({
+    label: '立方体：正面是正方形，深度沿 45° 斜向退出',
+    build: () => {
+      const P = (x, y, z) => project([x * size, y * size, z * size]);
+      return [
+        { points: [P(0, 0, 0), P(1, 0, 0), P(1, 1, 0), P(0, 1, 0)], fill: FILL_FRONT },
+        { points: [P(0, 1, 0), P(1, 1, 0), P(1, 1, 1), P(0, 1, 1)], fill: FILL_TOP },
+        { points: [P(1, 0, 0), P(1, 1, 0), P(1, 1, 1), P(1, 0, 1)], fill: FILL_SIDE }
+      ];
+    }
   });
 }
 
-/** 本模块提供的所有图解类型。 */
-export const SOLID_FIGURE_KINDS = Object.freeze(new Set([
-  'hollow-horizontal-cut',
-  'hollow-oblique-cut',
-  'hollow-vs-solid'
-]));
+export const SOLID_FIGURE_KINDS = Object.freeze(new Set(['cube-reference']));
 
-/** 按类型渲染一张易错点图解。 */
 export function renderSolidFigure(kind, options = {}) {
   switch (kind) {
-    case 'hollow-horizontal-cut': return renderHollowCylinderCut(options);
-    case 'hollow-oblique-cut': return renderHollowObliqueCut(options);
-    case 'hollow-vs-solid': return renderHollowVsSolidCut(options);
+    case 'cube-reference': return renderCubeReference(options);
     default: throw new Error(`solid-figures: 未知图解类型 "${kind}"`);
   }
 }
 
 export default { renderSolidFigure, SOLID_FIGURE_KINDS };
-
-
