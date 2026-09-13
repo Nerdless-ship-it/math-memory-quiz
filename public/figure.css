@@ -189,3 +189,38 @@
   font-family: "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
   font-size: 12px;
 }
+
+/* ── 标准几何体：立体图与视图形状（public/js/solid-shapes.js）──────────
+ *
+ * .figure-solid-face    立体图里的一个面（有 --a/b/c 灰阶时用灰阶填充）
+ * .figure-solid-outline 只描边不填充的面（例如圆锥的底面椭圆）
+ * .figure-solid-equator 球的赤道椭圆
+ * .figure-view-shape    视图里的图形（矩形 / 圆 / 三角形 / 正多边形）
+ * .figure-view-shape-spoke 棱锥俯视图的对角线
+ */
+.figure-solid-face {
+  stroke: var(--ink, #17231f);
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+}
+
+.figure-solid-outline { fill: none; }
+
+.figure-solid-equator {
+  fill: none;
+  stroke: var(--ink, #17231f);
+  stroke-width: 1.1;
+  opacity: 0.7;
+}
+
+.figure-view-shape {
+  fill: #eef3f0;
+  stroke: var(--ink, #17231f);
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+}
+
+.figure-view-shape-spoke {
+  stroke: var(--ink, #17231f);
+  stroke-width: 1.1;
+}

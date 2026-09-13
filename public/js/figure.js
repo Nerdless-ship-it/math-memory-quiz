@@ -23,6 +23,11 @@
 
 import { cubeSection, sectionSideCount, sectionName } from './geometry-loader.js';
 import { normalizeCubes, orthoViews, VIEW_LABELS } from './three-views.js';
+import {
+  SOLID_BY_ID, SOLID_SHAPES, renderShape,
+  renderSolid3d as renderSolidSolid,
+  renderShapeViews as renderSolidShapeViews
+} from './solid-shapes.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -591,6 +596,32 @@ function renderThreeViews(spec) {
   });
 }
 
+// ── ⑨⑩⑪ 标准几何体：圆柱 / 圆锥 / 球 / 长方体 / 正棱柱 / 正棱锥 ──────────
+//
+// 与前面的小方块体系并列的另一套：曲面体与棱柱棱锥，视图是矩形 / 圆 / 三角形 / 正多边形。
+// 几何与画法都在 solid-shapes.js（同样零依赖、不手写坐标），这里只做契约登记。
+function renderSolid3d(spec) {
+  if (!SOLID_BY_ID[spec?.solid]) {
+    throw new Error(`figure:solid-3d: 未知立体 "${spec?.solid}"，可用：${SOLID_SHAPES.map((s) => s.id).join(', ')}`);
+  }
+  return renderSolidSolid(spec.solid);
+}
+
+function renderViewShape(spec) {
+  const shape = spec?.shape;
+  if (!shape || typeof shape !== 'object' || !shape.kind) {
+    throw new Error('figure:view-shape: spec.shape 必须是带 kind 的形状描述');
+  }
+  return renderShape(shape);
+}
+
+function renderShapeViews(spec) {
+  if (!SOLID_BY_ID[spec?.solid]) {
+    throw new Error(`figure:shape-views: 未知立体 "${spec?.solid}"`);
+  }
+  return renderSolidShapeViews(spec.solid);
+}
+
 const RENDERERS = Object.freeze({
   'figure:cube-net': renderCubeNet,
   'figure:cube-fold': renderCubeFold,
@@ -599,7 +630,10 @@ const RENDERERS = Object.freeze({
   'figure:custom': renderCustom,
   'figure:block-solid': renderBlockSolid,
   'figure:view-cells': renderViewCells,
-  'figure:three-views': renderThreeViews
+  'figure:three-views': renderThreeViews,
+  'figure:solid-3d': renderSolid3d,
+  'figure:view-shape': renderViewShape,
+  'figure:shape-views': renderShapeViews
 });
 
 export const FIGURE_KINDS = Object.freeze(new Set(Object.keys(RENDERERS)));
@@ -664,6 +698,20 @@ export function isValidFigure(figure) {
       && Array.isArray(cells) && cells.length > 0
       && cells.every((c) => Array.isArray(c) && c.length === 2 && c.every((v) => Number.isInteger(v))
         && c[0] >= 0 && c[1] >= 0 && c[0] < cols && c[1] < rows);
+  }
+  if (kind === 'figure:solid-3d' || kind === 'figure:shape-views') {
+    return Boolean(SOLID_BY_ID[figure.spec?.solid]);
+  }
+  if (kind === 'figure:view-shape') {
+    const shape = figure.spec?.shape;
+    if (!shape || typeof shape !== 'object') return false;
+    if (!['rect', 'circle', 'triangle', 'polygon', 'ellipse'].includes(shape.kind)) return false;
+    const positive = (v) => Number.isFinite(v) && v > 0;
+    if (shape.kind === 'rect') return positive(shape.width) && positive(shape.height);
+    if (shape.kind === 'circle') return positive(shape.radius);
+    if (shape.kind === 'ellipse') return positive(shape.rx) && positive(shape.ry);
+    if (shape.kind === 'triangle') return positive(shape.base) && positive(shape.height);
+    return Number.isInteger(shape.sides) && shape.sides >= 3 && positive(shape.radius);
   }
   return false;
 }

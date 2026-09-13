@@ -106,12 +106,17 @@ test('视图工具：镜像、加减格都保持网格合法，且能构造出�
 
 // ── ③ 题库正确性 ───────────────────────────────────────────────────────
 
-test('题库：24 题、id 唯一、每题都能定位到唯一正确答案', () => {
-  assert.equal(ITEMS.length, 24, '题库应为 24 题');
-  assert.equal(new Set(ITEMS.map((i) => i.id)).size, 24, '题目 id 必须唯一');
-  assert.equal(SOLIDS.length * (VIEWS.length + 1), 24, '6 个立体 ×（3 个方向 + 1 道反向题）');
+test('题库：36 题（24 道方块 + 12 道标准几何体）、id 唯一、方块题都能定位唯一答案', () => {
+  assert.equal(ITEMS.length, 36, '题库应为 36 题');
+  assert.equal(new Set(ITEMS.map((i) => i.id)).size, ITEMS.length, '题目 id 必须唯一');
+  assert.equal(SOLIDS.length * (VIEWS.length + 1), 24, '方块部分：6 个立体 ×（3 个方向 + 1 道反向题）');
 
-  for (const item of ITEMS) {
+  // 标准几何体的 12 题由 test/solid-shapes.test.mjs 逐条校验，这里只管方块部分
+  const voxelItems = ITEMS.filter((item) => item.figure.kind === 'figure:block-solid'
+    || item.figure.kind === 'figure:three-views');
+  assert.equal(voxelItems.length, 24, '方块题的题干只有两种：立体图 / 三视图组合');
+
+  for (const item of voxelItems) {
     const answerIndex = 'ABCD'.indexOf(item.back);
     assert.ok(answerIndex >= 0, `${item.id}: back 必须是 A~D，收到 ${item.back}`);
     assert.deepEqual(item.choiceTexts, ['A', 'B', 'C', 'D'], `${item.id}: 选项标签固定 A~D`);
@@ -150,22 +155,21 @@ test('题库：四个选项两两不同（选项里有重复图形 = 题目不�
 });
 
 test('题库：每题都有三个干扰项，且理由都在约定的错误类型里', () => {
-  const allowed = [
-    /^方向看错：给成了(主视图|俯视图|左视图)$/,
-    /^左右镜像/,
-    /^上下镜像/,
-    /^少画了一个方块$/,
-    /^多画了一个方块$/,
-    /^在 \(\d+,\d+,\d+\) 多了一个方块$/,
-    /^缺了 \(\d+,\d+,\d+\) 处的方块$/,
-    /^前后镜像/
+  // 理由后面会跟一个尺寸说明（如「（1.80×2.00）」），所以只校验前缀
+  const allowedPrefixes = [
+    '方向看错', '左右镜像', '上下镜像', '少画了一个方块', '多画了一个方块',
+    '在 (', '缺了 (', '前后镜像',
+    '尺寸看错', '直径当成半径', '半径当成直径', '长宽互换', '宽度看错', '高度看错',
+    '底面看错', '边数看错', '漏画对角线', '把圆画成了椭圆', '整体画小了', '形状认错', '三视图不符'
   ];
   for (const item of ITEMS) {
     const reasons = DISTRACTOR_REASONS.get(item.id);
     assert.ok(Array.isArray(reasons), `${item.id}: 缺干扰项理由`);
     assert.equal(reasons.length, 3, `${item.id}: 应有三个干扰项理由`);
     for (const reason of reasons) {
-      assert.ok(allowed.some((pattern) => pattern.test(reason)),
+      assert.equal(typeof reason, 'string');
+      assert.ok(reason.trim().length > 0, `${item.id}: 理由不能为空`);
+      assert.ok(allowedPrefixes.some((prefix) => reason.startsWith(prefix)),
         `${item.id}: 干扰项理由「${reason}」不在约定的错误类型里`);
     }
   }
