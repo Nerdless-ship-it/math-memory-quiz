@@ -350,17 +350,123 @@ function solidPrimitives(solid) {
   return polyhedronPrimitives(vertices, faces);
 }
 
-/** 多面体：只画朝向观察者的面（凸体可见面互不重叠，无需排序）。 */
+/**
+ * 多面体：返回**全部面**（带法向）。
+ * ⚠️ 不能在这里就滤掉背面的面——可旋转画法要在旋转后重新判可见性，
+ * 提前滤掉会让「转过去之后本应露出来的面」画不出来。可见性由各自的渲染函数判。
+ */
 function polyhedronPrimitives(vertices, faces) {
   const shades = ['a', 'b', 'c'];
-  const visible = faces.filter((face) => dot(face.normal, CAMERA_DIR) > 1e-6);
-  // 顶面最亮、正对观察者的次之：按法向与视线的夹角排序，正面越亮
-  visible.sort((a, b) => dot(b.normal, CAMERA_DIR) - dot(a.normal, CAMERA_DIR));
-  return visible.map((face, index) => ({
+  const order = [...faces].sort((a, b) => dot(b.normal, CAMERA_DIR) - dot(a.normal, CAMERA_DIR));
+  return order.map((face, index) => ({
     kind: 'poly',
     points: face.indices.map((i) => vertices[i]),
-    shade: shades[index % shades.length]
+    shade: shades[index % shades.length],
+    normal: face.normal
   }));
+}
+
+/**
+ * 相机旋转（与搭建器同一套：先绕世界竖直轴 yaw，再绕相机水平轴 pitch）。
+ * 用在**可旋转**的立体画法里；题库里的立体图用固定视角，不走这里。
+ */
+export function orbitPoint([x, y, z], yawDeg = 0, pitchDeg = 0) {
+  const yaw = (yawDeg * Math.PI) / 180;
+  const pitch = (pitchDeg * Math.PI) / 180;
+  const cy = Math.cos(yaw);
+  const sy = Math.sin(yaw);
+  const x1 = x * cy + z * sy;
+  const z1 = z * cy - x * sy;
+  const cp = Math.cos(pitch);
+  const sp = Math.sin(pitch);
+  return [x1, y * cp - z1 * sp, y * sp + z1 * cp];
+}
+
+/**
+ * 可旋转的立体画法（搭建器用）：正交投影 + 按旋转后的法向判可见性。
+ * 与 renderSolid3d 的区别：那个用固定的斜二测视角（题库图要统一、不能变），
+ * 这个跟着 yaw / pitch 转，屏幕坐标就是相机系坐标、深度用于排序。
+ */
+export function renderSolidRotated(solid, options = {}) {
+  const shape = SOLID_BY_ID[typeof solid === 'string' ? solid : solid?.id];
+  if (!shape) throw new Error(`solid-shapes: 未知立体 "${solid?.id ?? solid}"`);
+  const yaw = Number.isFinite(options.yaw) ? options.yaw : 0;
+  const pitch = Number.isFinite(options.pitch) ? options.pitch : 0;
+  const primitives = solidPrimitives(shape);
+  const rotate = (p) => orbitPoint(p, yaw, pitch);
+  const project2 = (p) => {
+    const [x, y, z] = rotate(p);
+    return { x, y: -y, depth: z };
+  };
+
+  // 包围盒：用所有图元顶点（球另外补轮廓四点）
+  const projected = [];
+  for (const primitive of primitives) {
+    for (const point of primitive.points ?? []) projected.push(project2(point));
+  }
+  if (shape.id === 'sphere') {
+    for (const offset of [[-shape.radius, 0, 0], [shape.radius, 0, 0], [0, -shape.radius, 0], [0, shape.radius, 0]]) {
+      projected.push(project2(offset));
+    }
+  }
+  const minX = Math.min(...projected.map((p) => p.x));
+  const maxX = Math.max(...projected.map((p) => p.x));
+  const minY = Math.min(...projected.map((p) => p.y));
+  const maxY = Math.max(...projected.map((p) => p.y));
+  const pad = 14;
+  const unit = Math.min(
+    (options.width ?? 260) / Math.max(maxX - minX, 1e-6),
+    (options.height ?? 240) / Math.max(maxY - minY, 1e-6)
+  );
+  const width = Math.round((maxX - minX) * unit + pad * 2);
+  const height = Math.round((maxY - minY) * unit + pad * 2);
+  const toScreen = (p) => {
+    const q = project2(p);
+    return [(q.x - minX) * unit + pad, (q.y - minY) * unit + pad];
+  };
+
+  const svg = svgEl('svg', {
+    viewBox: `0 0 ${width} ${height}`,
+    width: '100%',
+    preserveAspectRatio: 'xMidYMid meet',
+    role: 'img',
+    'aria-label': `${shape.name}的立体图（可旋转）`,
+    class: 'builder-scene-solid'
+  });
+  svg.style.maxWidth = `${width}px`;
+  svg.style.aspectRatio = `${width} / ${height}`;
+
+  const drawPoly = (points, className) => svg.append(svgEl('path', { d: polygonPath(points), class: className }));
+
+  for (const primitive of primitives) {
+    if (primitive.kind === 'sphere') {
+      const center = toScreen([0, 0, 0]);
+      svg.append(svgEl('circle', {
+        cx: center[0], cy: center[1], r: primitive.radius * unit,
+        class: 'figure-solid-face figure-cube-face--b'
+      }));
+      continue;
+    }
+    if (primitive.kind === 'equator') {
+      drawPoly([...Array(CIRCLE_SAMPLES)].map((_, i) => {
+        const angle = (2 * Math.PI * i) / CIRCLE_SAMPLES;
+        return toScreen([primitive.radius * Math.cos(angle), 0, primitive.radius * Math.sin(angle)]);
+      }), 'figure-solid-equator');
+      continue;
+    }
+    if (primitive.normal) {
+      const [nx, ny, nz] = orbitPoint(primitive.normal, yaw, pitch);
+      if (nz <= 1e-6) continue; // 转过去的面不画
+      const shade = nz > 0.75 ? 'a' : nz > 0.3 ? 'b' : 'c';
+      drawPoly(primitive.points.map(toScreen), `figure-solid-face figure-cube-face--${shade}`);
+      continue;
+    }
+    const points = primitive.kind === 'hull'
+      ? convexHull(primitive.points.map(toScreen))
+      : primitive.points.map(toScreen);
+    drawPoly(points, `figure-solid-face${primitive.shade ? ` figure-cube-face--${primitive.shade}` : ''}${primitive.strokeOnly ? ' figure-solid-outline' : ''}`);
+  }
+  return svg;
 }
 
 /**
@@ -431,6 +537,7 @@ export function renderSolid3d(solid, options = {}) {
     const points = primitive.kind === 'hull'
       ? convexHull(primitive.points.map(toScreen))
       : primitive.points.map(toScreen);
+    if (primitive.normal && dot(primitive.normal, CAMERA_DIR) <= 1e-6) continue; // 固定视角下的背面不画
     svg.append(svgEl('path', {
       d: polygonPath(points),
       class: `figure-solid-face${primitive.shade ? ` figure-cube-face--${primitive.shade}` : ''}${primitive.strokeOnly ? ' figure-solid-outline' : ''}`
@@ -544,6 +651,8 @@ export default {
   shapeLabel,
   renderShape,
   renderSolid3d,
+  renderSolidRotated,
   renderShapeViews,
+  orbitPoint,
   sideLength
 };

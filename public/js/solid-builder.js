@@ -26,6 +26,9 @@
  */
 
 import { orthoViews, VIEW_LABELS } from './three-views.js';
+import {
+  SOLID_SHAPES, SOLID_BY_ID, solidViews, shapeLabel, renderShape, renderSolidRotated
+} from './solid-shapes.js';
 
 export const MAX_SIZE = 4;
 export const DEFAULT_VIEW = Object.freeze({ yaw: -32, pitch: 26 });
@@ -256,8 +259,10 @@ export function mountSolidBuilder(container, options = {}) {
     yaw: clamp(options.yaw ?? DEFAULT_VIEW.yaw, VIEW_LIMITS.yaw),
     pitch: clamp(options.pitch ?? DEFAULT_VIEW.pitch, PITCH_LIMIT)
   };
-  let mode = 'add'; // add | remove
+  let mode = 'add'; // add | remove（仅「自由搭建」模式）
   let tab = 'solid'; // solid | front | top | left
+  let source = options.source === 'shapes' ? 'shapes' : 'cubes'; // cubes = 堆方块；shapes = 选几何体
+  let shapeId = SOLID_BY_ID[options.shape] ? options.shape : SOLID_SHAPES[0].id;
   let drag = null;
 
   const host = doc.createElement('div');
@@ -267,6 +272,26 @@ export function mountSolidBuilder(container, options = {}) {
   // ── 工具条 ────────────────────────────────────────────────────
   const toolbar = doc.createElement('div');
   toolbar.className = 'builder-toolbar';
+
+  // 内容来源：自己堆方块 / 从标准几何体里选一个
+  const sources = doc.createElement('div');
+  sources.className = 'builder-sources';
+  const sourceButtons = new Map();
+  for (const [key, text, hint] of [
+    ['cubes', '自由搭建', '自己用小方块搭立体'],
+    ['shapes', '标准几何体', '从圆柱、圆锥、球等几何体里选一个看它的三视图']
+  ]) {
+    const button = doc.createElement('button');
+    button.type = 'button';
+    button.className = 'builder-source';
+    button.textContent = text;
+    button.setAttribute('aria-label', hint);
+    button.addEventListener('click', () => setSource(key));
+    sourceButtons.set(key, button);
+    sources.append(button);
+  }
+  toolbar.append(sources);
+
   const tabs = doc.createElement('div');
   tabs.className = 'builder-tabs';
   const tabButtons = new Map();
@@ -316,6 +341,25 @@ export function mountSolidBuilder(container, options = {}) {
   toolbar.append(actions);
   host.append(toolbar);
 
+  // ── 几何体库（仅「标准几何体」模式）─────────────────────────────
+  const gallery = doc.createElement('div');
+  gallery.className = 'builder-gallery';
+  const shapeButtons = new Map();
+  for (const solid of SOLID_SHAPES) {
+    const button = doc.createElement('button');
+    button.type = 'button';
+    button.className = 'builder-shape';
+    button.setAttribute('aria-label', `选择${solid.name}`);
+    const label = doc.createElement('span');
+    label.className = 'builder-shape-name';
+    label.textContent = solid.name;
+    button.append(label);
+    button.addEventListener('click', () => setShape(solid.id));
+    shapeButtons.set(solid.id, button);
+    gallery.append(button);
+  }
+  host.append(gallery);
+
   // ── 画布 + 三个实时视图 ───────────────────────────────────────
   const canvas = doc.createElement('div');
   canvas.className = 'builder-canvas';
@@ -335,8 +379,7 @@ export function mountSolidBuilder(container, options = {}) {
   const hint = doc.createElement('p');
   hint.className = 'builder-hint';
   hint.textContent = '拖动可旋转观察方向；点某个面在那一侧加方块，点地面在地面加方块。'
-    + '三个视图由立体本身决定——转动观察方向，它们不会变。';
-  host.append(hint);
+    + '三个视图由立体本身决定——转动观察方向，它们不会变。';  host.append(hint);
 
   // ── 交互 ──────────────────────────────────────────────────────
   function hitFromEvent(event) {
@@ -350,6 +393,7 @@ export function mountSolidBuilder(container, options = {}) {
 
   function applyHit(hit) {
     if (!hit) return;
+    if (source === 'shapes') return; // 几何体模式下不可增删（没有方块可编辑）
     if (mode === 'remove') {
       if (hit.kind !== 'face') return;
       const next = removeCube(cubes, hit.cube.split(',').map(Number));
@@ -400,6 +444,7 @@ export function mountSolidBuilder(container, options = {}) {
   canvas.addEventListener('contextmenu', (event) => {
     const hit = hitFromEvent(event);
     event.preventDefault?.();
+    if (source === 'shapes') return;
     if (hit?.kind === 'face') {
       const next = removeCube(cubes, hit.cube.split(',').map(Number));
       if (next !== cubes) { history.push(cubes); cubes = next; draw(); }
@@ -418,16 +463,33 @@ export function mountSolidBuilder(container, options = {}) {
 
   // ── 绘制 ──────────────────────────────────────────────────────
   function draw() {
-    // 空立体是合法状态（刚清空）：几何层不接受空数组，所以这里单独处理
-    const views = cubes.length > 0 ? orthoViews(cubes) : null;
+    const isShapes = source === 'shapes';
+    // 方块模式：空立体是合法状态（刚清空），几何层不接受空数组，所以单独处理
+    const cubeViews = !isShapes && cubes.length > 0 ? orthoViews(cubes) : null;
+    const shapeViewData = isShapes ? solidViews(shapeId) : null;
+    const shape = isShapes ? SOLID_BY_ID[shapeId] : null;
+
     for (const [key, button] of tabButtons) button.setAttribute('aria-pressed', String(key === tab));
+    for (const [key, button] of sourceButtons) button.setAttribute('aria-pressed', String(key === source));
     for (const [key, button] of modeButtons) button.setAttribute('aria-pressed', String(key === mode));
+    for (const [key, button] of shapeButtons) button.setAttribute('aria-pressed', String(key === shapeId));
+    modes.hidden = isShapes; // 加/删方块只对「自由搭建」有意义
+    actions.hidden = isShapes; // 撤销 / 清空同理
+    gallery.hidden = !isShapes;
+    hint.textContent = isShapes
+      ? '拖动可旋转观察方向，点上面一排几何体换一个。三个视图由立体本身决定——转动观察方向，它们不会变。'
+      : '拖动可旋转观察方向；点某个面在那一侧加方块，点地面在地面加方块。'
+        + '三个视图由立体本身决定——转动观察方向，它们不会变。';
 
     canvas.replaceChildren();
-    if (tab === 'solid' || !views) {
+    if (isShapes) {
+      canvas.append(tab === 'solid'
+        ? renderSolidRotated(shapeId, { yaw: view.yaw, pitch: view.pitch, width: 260, height: 240 })
+        : renderShape(shapeViewData[tab], { unit: 46 }));
+    } else if (tab === 'solid' || !cubeViews) {
       canvas.append(renderSolidScene(cubes, { yaw: view.yaw, pitch: view.pitch }));
     } else {
-      const big = renderGridView(views[tab], { cell: CELL, className: 'builder-view-cell' });
+      const big = renderGridView(cubeViews[tab], { cell: CELL, className: 'builder-view-cell' });
       big.style.maxWidth = '100%';
       canvas.append(big);
     }
@@ -440,8 +502,10 @@ export function mountSolidBuilder(container, options = {}) {
       title.className = 'builder-strip-title';
       title.textContent = VIEW_LABELS[name];
       cell.append(title);
-      if (views) {
-        cell.append(renderGridView(views[name], { cell: 22, pad: 4, className: 'builder-view-cell' }));
+      if (isShapes) {
+        cell.append(renderShape(shapeViewData[name], { unit: 18, pad: 6 }));
+      } else if (cubeViews) {
+        cell.append(renderGridView(cubeViews[name], { cell: 22, pad: 4, className: 'builder-view-cell' }));
       } else {
         const empty = doc.createElement('div');
         empty.className = 'builder-strip-empty';
@@ -451,13 +515,34 @@ export function mountSolidBuilder(container, options = {}) {
       strip.append(cell);
     }
 
+    if (isShapes) {
+      status.textContent = `当前：${shape.name}`;
+      canvas.setAttribute('aria-label',
+        `${shape.name}的立体图形画布。主视图${shapeLabel(shapeViewData.front)}。`
+        + `俯视图${shapeLabel(shapeViewData.top)}。左视图${shapeLabel(shapeViewData.left)}。`
+        + '拖动或方向键旋转观察方向。');
+      return;
+    }
+
     const total = cubes.length;
     status.textContent = `当前有 ${total} 个小方块` + (total === 0 ? '——点地面上的格子开始搭' : '');
     canvas.setAttribute('aria-label', total === 0
       ? '立体图形画布：还没有方块，点地面上的格子开始搭。'
-      : `立体图形画布：当前 ${total} 个小方块。${VIEW_LABELS.front}${describeView(views.front)}。`
-        + `${VIEW_LABELS.top}${describeView(views.top)}。${VIEW_LABELS.left}${describeView(views.left)}。`
+      : `立体图形画布：当前 ${total} 个小方块。${VIEW_LABELS.front}${describeView(cubeViews.front)}。`
+        + `${VIEW_LABELS.top}${describeView(cubeViews.top)}。${VIEW_LABELS.left}${describeView(cubeViews.left)}。`
         + '拖动或方向键旋转观察方向。');
+  }
+
+  function setSource(next) {
+    if (!['cubes', 'shapes'].includes(next) || next === source) return;
+    source = next;
+    draw();
+  }
+
+  function setShape(next) {
+    if (!SOLID_BY_ID[next]) return;
+    shapeId = next;
+    draw();
   }
 
   function setTab(next) {
@@ -489,8 +574,12 @@ export function mountSolidBuilder(container, options = {}) {
     getCubes: () => cubes.map((cube) => [...cube]),
     setTab,
     setMode,
+    setSource,
+    setShape,
     clear,
     get view() { return { ...view }; },
+    get source() { return source; },
+    get shape() { return shapeId; },
     root: host,
     destroy() { host.remove(); }
   };

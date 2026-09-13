@@ -348,3 +348,102 @@ test('交互：画布的无障碍标签描述当前三个视图', () => {
     assert.match(label, /拖动或方向键旋转/);
   });
 });
+
+// ── ④ 标准几何体模式（圆柱 / 圆锥 / 球 / 长方体 / 正棱柱 / 正棱锥）──────────
+
+test('几何体模式：切换后出现几何体库，加删方块控件隐藏', () => {
+  withStubDocument(() => {
+    const { container, handle } = mountBuilder([[0, 0, 0]]);
+    const shapes = byClass(container, 'builder-shape');
+    assert.equal(shapes.length, 6, '几何体库应有六个标准几何体');
+    assert.equal(byClass(container, 'builder-gallery')[0].hidden, true, '方块模式下几何体库应隐藏');
+
+    byClass(container, 'builder-source').find((b) => b.textContent === '标准几何体').dispatch('click');
+    assert.equal(handle.source, 'shapes');
+    assert.equal(byClass(container, 'builder-gallery')[0].hidden, false, '几何体模式下应显示几何体库');
+    // 加/删、撤销/清空这两个控件行整体隐藏（CSS 里补了 [hidden] 规则，
+    // 否则 display:flex 会把 hidden 顶掉——浏览器里实测过一次）
+    assert.equal(byClass(container, 'builder-modes')[0].hidden, true, '加/删方块控件应隐藏');
+    assert.equal(byClass(container, 'builder-actions')[0].hidden, true, '撤销/清空应隐藏');
+    assert.match(byClass(container, 'builder-status')[0].textContent, /圆柱/, '默认选中第一个几何体');
+    assert.match(byClass(container, 'builder-hint')[0].textContent, /几何体/, '提示语应随模式变化');
+  });
+});
+
+test('几何体模式：三个视图用形状显示（圆柱 = 两个矩形 + 一个圆）', () => {
+  withStubDocument(() => {
+    const { container, handle } = mountBuilder([[0, 0, 0]]);
+    handle.setSource('shapes');
+    const strip = byClass(container, 'builder-strip')[0];
+    const shapesInStrip = byClass(strip, 'figure-view-shape');
+    assert.equal(shapesInStrip.length, 3, '三个视图各有一个形状');
+    const tags = shapesInStrip.map((node) => node.tagName).sort();
+    assert.deepEqual(tags, ['circle', 'rect', 'rect'], '圆柱三视图 = 两个矩形 + 一个圆');
+    assert.match(byClass(container, 'builder-canvas')[0].getAttribute('aria-label'), /半径 1 的圆/);
+  });
+});
+
+test('几何体模式：换几何体后画布与三视图都跟着换', () => {
+  withStubDocument(() => {
+    const { container, handle } = mountBuilder([[0, 0, 0]]);
+    handle.setSource('shapes');
+    const stripTags = () => byClass(byClass(container, 'builder-strip')[0], 'figure-view-shape')
+      .map((node) => node.tagName).sort().join(',');
+    assert.equal(stripTags(), 'circle,rect,rect');
+
+    const coneButton = byClass(container, 'builder-shape').find((b) => b.getAttribute('aria-label') === '选择圆锥');
+    coneButton.dispatch('click');
+    assert.equal(handle.shape, 'cone');
+    assert.equal(stripTags(), 'circle,path,path', '圆锥三视图 = 两个三角形（path）+ 一个圆');
+    assert.match(byClass(container, 'builder-status')[0].textContent, /圆锥/);
+
+    const sphereButton = byClass(container, 'builder-shape').find((b) => b.getAttribute('aria-label') === '选择球');
+    sphereButton.dispatch('click');
+    assert.equal(stripTags(), 'circle,circle,circle', '球的三视图都是圆');
+  });
+});
+
+test('几何体模式：拖动旋转观察方向，三个视图仍然不变（核心不变量）', () => {
+  withStubDocument(() => {
+    const { container, handle, canvas } = mountBuilder([[0, 0, 0]]);
+    handle.setSource('shapes');
+    const signature = () => byClass(byClass(container, 'builder-strip')[0], 'figure-view-shape')
+      .map((node) => `${node.tagName}:${node.attributes.r ?? node.attributes.d ?? ''}`).join('|');
+    const before = signature();
+
+    canvas.dispatch('pointerdown', { target: canvas, clientX: 30, clientY: 30, pointerId: 1, button: 0, preventDefault() {} });
+    canvas.dispatch('pointermove', { target: canvas, clientX: 150, clientY: 70, pointerId: 1 });
+    canvas.dispatch('pointerup', { target: canvas, clientX: 150, clientY: 70, pointerId: 1, preventDefault() {} });
+    assert.equal(signature(), before, '几何体模式下旋转同样不能改变三个视图');
+    assert.equal(handle.view.yaw, DEFAULT_VIEW.yaw + 60, '横拖 120px × 0.5°/px 应转 60°');
+    assert.equal(handle.getCubes().length, 1, '几何体模式下拖动不得改方块');
+  });
+});
+
+test('几何体模式：点面不会加方块（此模式没有方块可编辑）', () => {
+  withStubDocument(() => {
+    const { container, handle, canvas, click } = mountBuilder([[0, 0, 0]]);
+    handle.setSource('shapes');
+    const before = handle.getCubes().length;
+    const anyShape = byClass(container, 'figure-view-shape')[0] ?? canvas;
+    click(anyShape);
+    assert.equal(handle.getCubes().length, before, '几何体模式下点面不应加方块');
+  });
+});
+
+test('几何体模式：切回自由搭建，方块与视图都恢复', () => {
+  withStubDocument(() => {
+    const cubes = [[0, 0, 0], [1, 0, 0], [0, 1, 0]];
+    const { container, handle } = mountBuilder(cubes);
+    handle.setSource('shapes');
+    handle.setSource('cubes');
+    assert.equal(handle.source, 'cubes');
+    assert.deepEqual(handle.getCubes(), cubes, '方块数据应原样保留');
+    assert.equal(byClass(container, 'builder-gallery')[0].hidden, true);
+    assert.equal(byClass(container, 'builder-modes')[0].hidden, false);
+    assert.equal(byClass(container, 'builder-actions')[0].hidden, false);
+    assert.equal(byClass(byClass(container, 'builder-strip')[0], 'builder-view-cell').length,
+      orthoViews(cubes).front.cells.length + orthoViews(cubes).top.cells.length + orthoViews(cubes).left.cells.length,
+      '方块模式的三个视图应恢复为方格');
+  });
+});

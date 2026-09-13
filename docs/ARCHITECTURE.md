@@ -719,7 +719,7 @@ export const FIGURE_KINDS                       // → Set<string> 白名单
 | `'builder'` | 「自己搭立体图形」：可交互的搭建器 | `solid-builder.js` |
 
 ```js
-export function mountSolidBuilder(container, options)  // → { setCubes, getCubes, setTab, setMode, clear, view, root, destroy }
+export function mountSolidBuilder(container, options)  // → { setCubes, getCubes, setTab, setMode, setSource, setShape, clear, view, source, shape, root, destroy }
 export function renderSolidScene(cubes, { yaw, pitch, … })  // → SVGElement（每个可见面带命中信息）
 export function renderGridView(view, { cell, pad })         // → SVGElement（主/俯/左视图都是它）
 export function orbit(point, yawDeg, pitchDeg)              // 相机旋转（世界坐标 → 相机坐标）
@@ -727,14 +727,26 @@ export function addCube / removeCube / neighborAcross       // 纯函数，越�
 export const MAX_SIZE = 4                                   // 4×4×4 上限：场景范围固定，加方块时画面不跳
 ```
 
+两种内容来源（`setSource`，界面上是两个按钮）：
+
+| source | 内容 | 三个视图的画法 |
+| --- | --- | --- |
+| `'cubes'`（默认） | 自己堆的小立方体（`setCubes` / 点面加方块） | `three-views.js` 的**方格** |
+| `'shapes'` | 从 `solid-shapes.js` 的目录里选一个标准几何体（`setShape`） | `solid-shapes.js` 的**形状**（矩形/圆/三角形/正多边形） |
+
 三条设计约束：
 
-1. **几何全部复用 `three-views.js`**（同一套坐标与方向约定），搭建器只管画与交互——
-   否则「题目里的视图」和「搭建器里的视图」会各算一套，迟早不一致。
+1. **几何全部复用已有模块**（`three-views.js` 管方块、`solid-shapes.js` 管标准几何体），
+   搭建器只管画与交互——否则「题目里的视图」和「搭建器里的视图」会各算一套，迟早不一致。
 2. **不复用 `fold-anim-view.js` 的相机**：那套是为折叠动画的纸面坐标（y 向下、z 离纸向上）
    写的，直接借用会把 y/z 搞反；`orbit()` 用自己的基，并有单测断言 0/0 是恒等变换、旋转保长。
 3. **转动观察方向不改变三个视图**（视图由立体本身决定）。这条是搭建器的教学核心，
-   由 `test/solid-builder.test.mjs` 断言：拖动前后三个视图的渲染签名必须逐字相同。
+   由 `test/solid-builder.test.mjs` 断言：两种模式下拖动前后三个视图的渲染签名都必须逐字相同。
+
+⚠️ 一个踩过的坑：控件行（`.builder-modes` / `.builder-actions` / `.builder-gallery`）都声明了
+`display: flex`，而 `hidden` 属性只带 UA 样式的 `display: none` ——**作者样式优先级更高，
+会把 hidden 顶掉**。所以 CSS 里必须显式补 `[hidden] { display: none }`，否则切到几何体模式后
+「加方块 / 撤销 / 清空」仍然显示在界面上（浏览器实测发现过一次）。
 
 ### 7.4 `geometry.js` 契约（纯函数，可单测；不得触碰 DOM）
 
