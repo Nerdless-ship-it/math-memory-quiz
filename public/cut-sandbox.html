@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#17231f" />
+    <meta name="description" content="拖动切面，实时看任意立体的截面形状怎么变。" />
+    <title>切面沙盒 · 速算训练</title>
+    <link rel="icon" href="./home-favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./sandbox.css" />
+    <link rel="stylesheet" href="./solid-view.css" />
+  </head>
+  <body data-sandbox-state="loading">
+    <noscript>
+      <p class="sandbox-noscript">这个页面需要 JavaScript 才能算截面。请开启后重新打开。</p>
+    </noscript>
+
+    <header class="topbar">
+      <a class="brand" href="./index.html" aria-label="返回科目选择">
+        <span class="brand-mark" aria-hidden="true">切</span>
+        <span>切面沙盒</span>
+      </a>
+      <div class="topbar-actions">
+        <a class="home-link" href="./index.html" aria-label="返回科目选择">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+          <span>返回选择</span>
+        </a>
+      </div>
+    </header>
+
+    <main class="sandbox-main">
+      <section class="sandbox-intro" aria-labelledby="sandbox-title">
+        <p class="sandbox-label">图形推理</p>
+        <h1 id="sandbox-title">切面沙盒</h1>
+        <p class="sandbox-lede">
+          自己动手切一刀，看截面到底是什么形状。立体可以任意组合，切面可以任意角度、任意位置——
+          「斜切圆柱得到的是椭圆，不是梯形」「切到空心部分就不带线」这类规则，拖着看一遍比背十遍都管用。
+        </p>
+      </section>
+
+      <section class="sandbox-controls" aria-label="沙盒控制">
+        <div class="sandbox-group">
+          <h2 class="sandbox-group-title">① 选立体</h2>
+          <div class="sandbox-chips" id="sandbox-solids" role="group" aria-label="选择立体"></div>
+          <p class="sandbox-hint" id="sandbox-solid-note"></p>
+        </div>
+
+        <div class="sandbox-group">
+          <h2 class="sandbox-group-title">② 调切面</h2>
+          <label class="sandbox-slider" for="sandbox-tilt">
+            <span class="sandbox-slider-label">倾斜角 <b id="sandbox-tilt-value">0°</b></span>
+            <input type="range" id="sandbox-tilt" min="0" max="90" step="1" value="35" />
+            <span class="sandbox-slider-ends"><em>0° 水平切</em><em>90° 竖直切</em></span>
+          </label>
+
+          <label class="sandbox-slider" for="sandbox-spin">
+            <span class="sandbox-slider-label">朝向 <b id="sandbox-spin-value">0°</b></span>
+            <input type="range" id="sandbox-spin" min="0" max="360" step="1" value="0" />
+          </label>
+
+          <label class="sandbox-slider" for="sandbox-d">
+            <span class="sandbox-slider-label">切面位置 <b id="sandbox-d-value">0.00</b></span>
+            <input type="range" id="sandbox-d" min="-1.4" max="1.4" step="0.01" value="0" />
+            <span class="sandbox-slider-ends"><em>往这头</em><em>往那头</em></span>
+          </label>
+
+          <button class="secondary-button" id="sandbox-reset" type="button">重置</button>
+        </div>
+      </section>
+
+      <section class="sandbox-stage" aria-label="立体与截面">
+        <figure class="sandbox-panel">
+          <figcaption>立体与切面</figcaption>
+          <div class="sandbox-canvas" id="sandbox-solid"></div>
+        </figure>
+        <figure class="sandbox-panel">
+          <figcaption>截面形状</figcaption>
+          <div class="sandbox-canvas" id="sandbox-section"></div>
+          <p class="sandbox-result" id="sandbox-result" data-tone="solid"></p>
+        </figure>
+      </section>
+
+      <p class="sandbox-lesson" id="sandbox-lesson" hidden></p>
+
+      <section class="sandbox-demos-section" aria-labelledby="sandbox-demos-title">
+        <h2 id="sandbox-demos-title">一键看典型情形</h2>
+        <p class="sandbox-demos-note">
+          下面每一条都是一个常见的易错点，点一下就把切面参数设好。
+        </p>
+        <div class="sandbox-demos" id="sandbox-demos"></div>
+      </section>
+    </main>
+
+    <script type="module" src="./js/sandbox-page.js"></script>
+  </body>
+</html>

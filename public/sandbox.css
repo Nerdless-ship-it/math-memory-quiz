@@ -1,0 +1,268 @@
+/* 切面沙盒（结构由 public/js/sandbox-page.js 生成或驱动）
+ *
+ * 类名清单（改动请同步 sandbox-page.js 与 cut-sandbox.html）：
+ *   .sandbox-main            页面主体
+ *   .sandbox-intro/-label/-lede   标题区
+ *   .sandbox-controls        控制区（两栏：选立体 / 调切面）
+ *   .sandbox-group/-group-title   控制分栏
+ *   .sandbox-chips           立体选择按钮组
+ *   .sandbox-chip            单个立体按钮（aria-pressed 表示选中）
+ *   .sandbox-hint            所选立体的一句提示
+ *   .sandbox-slider          滑块行（含两端标注）
+ *   .sandbox-stage           立体图 + 截面图并排
+ *   .sandbox-panel           单块图（figure）
+ *   .sandbox-canvas          SVG 挂载点
+ *   .sandbox-result          截面结论徽标（data-tone 区分实心/镂空/断开）
+ *   .sandbox-lesson          演示要点文字
+ *   .sandbox-demos/-demo     典型情形按钮
+ */
+
+.sandbox-main {
+  max-width: 1036px;
+  margin: 0 auto;
+  padding: clamp(24px, 4vw, 48px) var(--page-padding) 96px;
+}
+
+.sandbox-noscript {
+  margin: 0;
+  padding: 16px var(--page-padding);
+  color: var(--coral);
+  font-weight: 700;
+}
+
+/* ── 标题区 ─────────────────────────────────────────────────── */
+
+.sandbox-intro { margin-bottom: clamp(20px, 3vw, 32px); }
+
+.sandbox-label {
+  margin: 0 0 6px;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.sandbox-intro h1 {
+  margin: 0 0 10px;
+  font-size: clamp(26px, 3.4vw, 38px);
+  line-height: 1.15;
+}
+
+.sandbox-lede {
+  margin: 0;
+  max-width: 62ch;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+/* ── 控制区 ─────────────────────────────────────────────────── */
+
+.sandbox-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: clamp(16px, 2.4vw, 28px);
+  padding: clamp(16px, 2.2vw, 24px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--soft);
+}
+
+.sandbox-group { min-width: 0; }
+
+.sandbox-group-title {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.sandbox-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sandbox-chip {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.sandbox-chip:hover { border-color: #a9b7b1; }
+
+.sandbox-chip[aria-pressed="true"] {
+  border-color: var(--green);
+  background: var(--mint);
+  color: var(--green-dark);
+}
+
+.sandbox-hint {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+  min-height: 2.6em;
+}
+
+/* ── 滑块 ──────────────────────────────────────────────────── */
+
+.sandbox-slider {
+  display: block;
+  margin-bottom: 16px;
+}
+
+.sandbox-slider-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.sandbox-slider-label b {
+  color: var(--green);
+  font-variant-numeric: tabular-nums;
+}
+
+.sandbox-slider input[type="range"] {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--green);
+  cursor: pointer;
+}
+
+.sandbox-slider-ends {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.sandbox-slider-ends em { font-style: normal; }
+
+/* ── 舞台：立体图 + 截面图 ──────────────────────────────────── */
+
+.sandbox-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: clamp(16px, 2.4vw, 28px);
+  margin-top: clamp(20px, 3vw, 32px);
+}
+
+.sandbox-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: clamp(14px, 2vw, 22px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  min-width: 0;
+}
+
+.sandbox-panel figcaption {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.sandbox-canvas {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 240px;
+}
+
+/* 结论徽标：三种色调对应三种几何结论，不要合并 */
+.sandbox-result {
+  margin: 0;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.sandbox-result[data-tone="solid"] { background: var(--soft); color: var(--muted); }
+.sandbox-result[data-tone="hollow"] { background: var(--mint); color: var(--green-dark); }
+.sandbox-result[data-tone="split"] { background: var(--coral-soft); color: var(--coral); }
+.sandbox-result[data-tone="empty"] { background: var(--coral-soft); color: var(--coral); }
+
+/* ── 演示要点 ──────────────────────────────────────────────── */
+
+.sandbox-lesson {
+  margin: clamp(18px, 2.6vw, 26px) 0 0;
+  padding: 14px 16px;
+  border-left: 3px solid var(--green);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  background: var(--mint);
+  color: var(--green-dark);
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+/* ── 典型情形 ──────────────────────────────────────────────── */
+
+.sandbox-demos-section { margin-top: clamp(28px, 4vw, 44px); }
+
+.sandbox-demos-section h2 {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+
+.sandbox-demos-note {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.sandbox-demos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+}
+
+.sandbox-demo {
+  min-height: 46px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.sandbox-demo:hover {
+  border-color: var(--green);
+  background: var(--soft);
+}
+
+/* ── 窄屏 ──────────────────────────────────────────────────── */
+
+@media (max-width: 820px) {
+  .sandbox-controls,
+  .sandbox-stage {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sandbox-canvas { min-height: 200px; }
+}
