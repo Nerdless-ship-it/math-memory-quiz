@@ -22,6 +22,7 @@
  */
 
 import { cubeSection, sectionSideCount, sectionName } from './geometry-loader.js';
+import { normalizeCubes, orthoViews, VIEW_LABELS } from './three-views.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -426,12 +427,179 @@ function renderCustom(spec) {
   return node;
 }
 
+// ── ⑥ 小立方体堆叠的立体图（三视图题的题干）─────────────────────────────
+//
+// spec: { cubes: [[x,y,z], ...] }（整数坐标，见 three-views.js 的坐标约定）
+// 画法与 ② 折叠立体图同一套投影与同一套灰阶类，保证两种立体图看起来是一种画风。
+// 只画朝观察者的三个面（前 +z / 上 +y / 右 +x），并按**相机深度**从远到近画方块：
+// 近处的方块自然盖住远处的，不需要自己算隐藏面。
+function renderBlockSolid(spec) {
+  const { width: w, height: h, depth: d, cubes } = normalizeCubes(spec?.cubes ?? []);
+
+  const SCALE = 34;
+  const PAD = 14;
+  const corners = [];
+  for (const [x, y, z] of cubes) {
+    for (const dx of [0, 1]) {
+      for (const dy of [0, 1]) {
+        for (const dz of [0, 1]) corners.push(project([x + dx, y + dy, z + dz]));
+      }
+    }
+  }
+  const minX = Math.min(...corners.map((p) => p.x));
+  const maxX = Math.max(...corners.map((p) => p.x));
+  const minY = Math.min(...corners.map((p) => p.y));
+  const maxY = Math.max(...corners.map((p) => p.y));
+  const canvasW = Math.round((maxX - minX) * SCALE + PAD * 2);
+  const canvasH = Math.round((maxY - minY) * SCALE + PAD * 2);
+  const toScreen = (p) => {
+    const q = project(p);
+    return { x: PAD + (q.x - minX) * SCALE, y: PAD + (q.y - minY) * SCALE };
+  };
+  const quadPath = (points) => {
+    const pts = points.map(toScreen);
+    return `M${pts.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join('L')}Z`;
+  };
+
+  const depthOf = ([x, y, z]) => x * CAMERA_DIR[0] + y * CAMERA_DIR[1] + z * CAMERA_DIR[2];
+  const order = [...cubes].sort((a, b) => depthOf(a) - depthOf(b));
+
+  const children = [];
+  for (const [x, y, z] of order) {
+    children.push(svgElement('path', { // 前面 +z（最亮）
+      d: quadPath([[x, y, z + 1], [x + 1, y, z + 1], [x + 1, y + 1, z + 1], [x, y + 1, z + 1]]),
+      class: 'figure-cube-face figure-cube-face--a'
+    }));
+    children.push(svgElement('path', { // 顶面 +y
+      d: quadPath([[x, y + 1, z], [x + 1, y + 1, z], [x + 1, y + 1, z + 1], [x, y + 1, z + 1]]),
+      class: 'figure-cube-face figure-cube-face--b'
+    }));
+    children.push(svgElement('path', { // 右面 +x（最暗）
+      d: quadPath([[x + 1, y, z], [x + 1, y + 1, z], [x + 1, y + 1, z + 1], [x + 1, y, z + 1]]),
+      class: 'figure-cube-face figure-cube-face--c'
+    }));
+  }
+
+  return createSvg({
+    width: canvasW,
+    height: canvasH,
+    label: `由 ${cubes.length} 个小立方体搭成的立体图形：左右 ${w} 格、前后 ${d} 格、上下 ${h} 层`,
+    children
+  });
+}
+
+// ── ⑦⑧ 共用的二维方格绘制（单个视图 / 三视图组合都用它）──────────────────
+const VIEW_CELL = 38; // 单个视图里每小格的边长
+
+/** 视图的格子 → <rect> 节点（左上角定位，便于多个视图并排排版）。 */
+function viewRects(view, originX, originY, cell, className = 'figure-view-cell') {
+  return view.cells.map(([c, r]) => svgElement('rect', {
+    x: originX + c * cell,
+    y: originY + r * cell,
+    width: cell,
+    height: cell,
+    class: className,
+    'stroke-linejoin': 'round'
+  }));
+}
+
+/** 读屏用描述：每一行填了哪几列（图形题不能只说「一个图形」）。 */
+function describeView(view) {
+  const parts = [];
+  for (let r = 0; r < view.rows; r += 1) {
+    const cols = view.cells.filter(([, row]) => row === r).map(([c]) => c + 1);
+    parts.push(cols.length ? `第 ${r + 1} 行第 ${cols.join('、')} 列` : `第 ${r + 1} 行空`);
+  }
+  return `${view.cols} 列 ${view.rows} 行，共 ${view.cells.length} 个小正方形：${parts.join('；')}`;
+}
+
+// ── ⑦ 单个视图（主视图 / 俯视图 / 左视图的二维方格图形）────────────────
+//
+// spec: { cols, rows, cells: [[列, 行], ...] }
+// 格子由 three-views.js 算好后存进数据（题库文件里用的是生成器，不是手写坐标）。
+// ⚠️ 为什么不像正方体展开图那样只存「立体」：选项里的错项是**镜像 / 多一格 / 少一格**
+// 这类形状，它们不对应任何立体，只能以格子形式表达。
+function renderViewCells(spec) {
+  const cols = spec?.cols;
+  const rows = spec?.rows;
+  const cells = spec?.cells;
+  if (!Number.isInteger(cols) || cols <= 0 || !Number.isInteger(rows) || rows <= 0) {
+    throw new Error(`figure:view-cells: cols / rows 必须是正整数，收到 ${JSON.stringify({ cols, rows })}`);
+  }
+  if (!Array.isArray(cells) || cells.length === 0) {
+    throw new Error('figure:view-cells: cells 不能为空');
+  }
+  for (const cell of cells) {
+    if (!Array.isArray(cell) || cell.length !== 2 || !cell.every((v) => Number.isInteger(v))) {
+      throw new Error(`figure:view-cells: cells 的元素必须是 [列, 行] 整数对，收到 ${JSON.stringify(cell)}`);
+    }
+    if (cell[0] < 0 || cell[1] < 0 || cell[0] >= cols || cell[1] >= rows) {
+      throw new Error(`figure:view-cells: 格子 (${cell[0]},${cell[1]}) 越出 ${cols}×${rows} 网格`);
+    }
+  }
+  const view = { cols, rows, cells };
+  const PAD = 12;
+  return createSvg({
+    width: cols * VIEW_CELL + PAD * 2,
+    height: rows * VIEW_CELL + PAD * 2,
+    label: `方格图形：${describeView(view)}`,
+    children: viewRects(view, PAD, PAD, VIEW_CELL)
+  });
+}
+
+// ── ⑧ 三视图组合（给三视图选立体图那一类题的题干）──────────────────────
+//
+// spec: { cubes: [...] } —— 画标准布局：主视图左上、左视图右上、俯视图在主视图正下方。
+// 布局本身就是知识点（长对正、高平齐、宽相等），所以隔开距离也保持对齐关系。
+const THREE_VIEW_CELL = 30;
+const THREE_VIEW_GAP = 26; // 两个视图之间的空隙
+const THREE_VIEW_TITLE = 22; // 标题占的高度
+
+function renderThreeViews(spec) {
+  const views = orthoViews(spec?.cubes ?? []);
+  const { front, top, left } = views;
+  const PAD = 12;
+  const gridW = THREE_VIEW_CELL;
+  const frontX = PAD;
+  const frontY = PAD;
+  const leftX = frontX + front.cols * gridW + THREE_VIEW_GAP;
+  const leftY = frontY; // 高平齐
+  const topX = frontX; // 长对正
+  const topY = frontY + front.rows * gridW + THREE_VIEW_TITLE + THREE_VIEW_GAP;
+
+  const children = [
+    ...viewRects(front, frontX, frontY, gridW),
+    ...viewRects(left, leftX, leftY, gridW),
+    ...viewRects(top, topX, topY, gridW)
+  ];
+  const title = (text, x, y, cols) => svgElement('text', {
+    x: x + (cols * gridW) / 2,
+    y,
+    class: 'figure-view-title',
+    'text-anchor': 'middle',
+    'aria-hidden': 'true'
+  }, text);
+  children.push(title(VIEW_LABELS.front, frontX, frontY + front.rows * gridW + 15, front.cols));
+  children.push(title(VIEW_LABELS.left, leftX, leftY + left.rows * gridW + 15, left.cols));
+  children.push(title(VIEW_LABELS.top, topX, topY + top.rows * gridW + 15, top.cols));
+
+  return createSvg({
+    width: leftX + left.cols * gridW + PAD,
+    height: topY + top.rows * gridW + THREE_VIEW_TITLE + PAD,
+    label: `三视图。主视图：${describeView(front)}。俯视图：${describeView(top)}。左视图：${describeView(left)}`,
+    children
+  });
+}
+
 const RENDERERS = Object.freeze({
   'figure:cube-net': renderCubeNet,
   'figure:cube-fold': renderCubeFold,
   'figure:cross-section': renderCrossSection,
   'figure:section-shape': renderSectionShape,
-  'figure:custom': renderCustom
+  'figure:custom': renderCustom,
+  'figure:block-solid': renderBlockSolid,
+  'figure:view-cells': renderViewCells,
+  'figure:three-views': renderThreeViews
 });
 
 export const FIGURE_KINDS = Object.freeze(new Set(Object.keys(RENDERERS)));
@@ -486,6 +654,17 @@ export function isValidFigure(figure) {
       && Number.isFinite(figure.spec?.d);
   }
   if (kind === 'figure:custom') return typeof figure.spec?.svg === 'string' && figure.spec.svg.trim().startsWith('<svg');
+  const cubesOk = (spec) => Array.isArray(spec?.cubes) && spec.cubes.length > 0
+    && spec.cubes.every((c) => Array.isArray(c) && c.length === 3 && c.every((v) => Number.isInteger(v)));
+  if (kind === 'figure:block-solid' || kind === 'figure:three-views') return cubesOk(figure.spec);
+  if (kind === 'figure:view-cells') {
+    const { cols, rows, cells } = figure.spec ?? {};
+    return Number.isInteger(cols) && cols > 0
+      && Number.isInteger(rows) && rows > 0
+      && Array.isArray(cells) && cells.length > 0
+      && cells.every((c) => Array.isArray(c) && c.length === 2 && c.every((v) => Number.isInteger(v))
+        && c[0] >= 0 && c[1] >= 0 && c[0] < cols && c[1] < rows);
+  }
   return false;
 }
 

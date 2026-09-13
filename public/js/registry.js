@@ -235,6 +235,28 @@ export const SUBJECTS = Object.freeze([
     uniqueBy: 'choices',
     // 欢迎页演示：quiz-page.js 见到该声明就显示「看切割演示」按钮（数据驱动，非硬编码）
     demo: 'figure'
+  },
+  {
+    id: 'three-views',
+    title: '立体三视图',
+    subtitle: '立体图形 → 主视图 / 俯视图 / 左视图',
+    category: 'figure',
+    accent: '#7f6f2f',
+    page: './quiz.html?subject=three-views',
+    icon: '视',
+    model: 'figure',
+    questionTypes: ['choice'],
+    adapter: 'figure-choice',
+    tags: ['图形推理'],
+    lockedDirection: 'forward',
+    updatedAt: null,
+    // 与另外两个图形科目同理：题干文案只有几种（「该立体图形的主视图是」…），
+    // 选项标签 A~D 也必然重复——重复是内容特性；题目身份落在**题干图形 + 选项组合**上。
+    // 这里比另外两科多算题干：本库有两个立体的三视图恰好相同（选项图形一模一样），
+    // 只按选项判重会把那两道不同的题误判成重复。
+    allowDuplicateFront: true,
+    allowDuplicateBack: true,
+    uniqueBy: 'figure+choices'
   }
 ]);
 
@@ -335,6 +357,9 @@ export const DIMENSIONS = Object.freeze({
   }),
   'cross-section': Object.freeze({
     截面图: '立体被截 → 截面形状'
+  }),
+  'three-views': Object.freeze({
+    三视图: '立体 → 主视图 / 俯视图 / 左视图'
   })
 });
 
@@ -430,7 +455,8 @@ const CONTENT_PATHS = new Map([
   ['falv-changshi', '../subjects/falv-changshi.item.js'],
   ['shizheng', '../subjects/shizheng.item.js'],
   ['cube-net', '../subjects/cube-net.item.js'],
-  ['cross-section', '../subjects/cross-section.item.js']
+  ['cross-section', '../subjects/cross-section.item.js'],
+  ['three-views', '../subjects/three-views.item.js']
 ]);
 
 /**

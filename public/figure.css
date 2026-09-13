@@ -170,3 +170,22 @@
   .choice-option--figure .choice-option-figure { max-width: 100%; max-height: 140px; }
   .figure-svg { max-height: 200px; }
 }
+
+/* ── 三视图：立体图 / 单个视图 / 三视图组合 ──────────────────────
+ *
+ * .figure-view-cell   视图里的一个小正方形。逐格描边＝教材画法（相邻两格之间
+ *                     自然出现一条实线，正是学生要数的那条边）。
+ * .figure-view-title  视图下方的「主视图 / 俯视图 / 左视图」小标题。
+ * 立体图复用 .figure-cube-face--a/b/c 的同一套灰阶，与折叠立体图同一种画风。
+ */
+.figure-view-cell {
+  fill: #eef3f0;
+  stroke: var(--ink, #17231f);
+  stroke-width: 1.4;
+}
+
+.figure-view-title {
+  fill: var(--muted, #66716d);
+  font-family: "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-size: 12px;
+}

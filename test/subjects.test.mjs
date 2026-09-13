@@ -109,6 +109,17 @@ test('科目内 id 唯一', () => {
 function identityKey(item, field) {
   if (field === 'figure') return JSON.stringify(item?.figure ?? null);
   if (field === 'choices') return JSON.stringify(item?.choiceFigures ?? item?.choiceTexts ?? null);
+  if (field === 'figure+choices') {
+    // 图形题的完整身份 = **题干图形 + 四个选项**。
+    // 只算选项会把「题干不同、选项恰好相同」的两道题误判成重复：
+    // three-views 里有两个立体的三视图完全一样，于是同一组选项配了两个不同题干。
+    // 那是两道不同的题（学生看的是题干那个立体），判重必须把题干预上——
+    // 这比 'choices' 更严，不会放宽任何现存科目。
+    return JSON.stringify([
+      item?.figure ?? null,
+      item?.choiceFigures ?? item?.choiceTexts ?? null
+    ]);
+  }
   return normalizeForCompare(String(item?.[field] ?? ''));
 }
 
