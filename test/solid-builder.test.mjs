@@ -516,7 +516,7 @@ test('组合体模式：部件库出现，加删方块控件隐藏，撤销清�
   });
 });
 
-test('组合体模式：点地面放部件、点部件叠在上面（x/z 自动对齐）', () => {
+test('组合体模式：点地面放部件、点部件叠在上面（x/z 自动对齐，且要托得住）', () => {
   withStubDocument(() => {
     const { container, handle, click } = mountBuilder([[0, 0, 0]]);
     handle.setSource('parts');
@@ -524,20 +524,48 @@ test('组合体模式：点地面放部件、点部件叠在上面（x/z 自动�
     click(ground);
     assert.deepEqual(handle.getParts(), [{ id: 'cube', at: [0, 0, 0] }], '默认放一个小方块在地面');
 
-    // 选圆柱，再点方块的顶面 → 叠在方块正上方
+    // 圆柱底面 2×2 比方块 1×1 大 ⇒ 托不住，拒绝（否则画面上悬空外伸，看着就是乱的）
     handle.setPart('cylinder');
-    const cubeFace = byClass(container, 'builder-face')[0];
-    click(cubeFace);
-    assert.deepEqual(handle.getParts(), [
-      { id: 'cube', at: [0, 0, 0] },
-      { id: 'cylinder', at: [0, 1, 0] }
-    ], '点部件应把它叠在正上方');
+    click(byClass(container, 'builder-face')[0]);
+    assert.equal(handle.getParts().length, 1, '托不住的部件不许叠上去');
+
+    // 换一个位置：圆柱放地面，再把小方块叠上去（1×1 落在 2×2 上，托得住）
+    const [undo, reset] = byClass(container, 'builder-action');
+    reset.dispatch('click'); // 清空
+    click(byClass(container, 'builder-ground').find((g) => g.getAttribute('data-ground') === '2,2'));
+    assert.deepEqual(handle.getParts(), [{ id: 'cylinder', at: [2, 0, 2] }], '圆柱放在指定地面格');
+    handle.setPart('cube');
+    const cylinderFace = byClass(container, 'builder-face').filter((f) => f.getAttribute('data-part') === '0')[0];
+    click(cylinderFace);
+    assert.deepEqual(handle.getParts().slice(-1), [{ id: 'cube', at: [2, 2, 2] }],
+      '方块应叠在圆柱正上方（圆柱高 2）');
+    void undo;
 
     // 组合体的三个视图应是「组合」出来的（方格模式不会有）
     const strip = byClass(container, 'builder-strip')[0];
     assert.ok(byClass(strip, 'figure-view-shape').length >= 6,
-      '三个视图里应有多个部件的形状（方块 1 + 圆柱 1 每视图各 2 个）');
-    assert.match(byClass(container, 'builder-status')[0].textContent, /小方块×1、圆柱×1/);
+      '三个视图里应有多个部件的形状');
+    assert.match(byClass(container, 'builder-status')[0].textContent, /圆柱×1、小方块×1/);
+  });
+});
+
+test('组合体模式：控件分成三行（内容 / 操作 / 视图），不再糊成一片', () => {
+  withStubDocument(() => {
+    const { container, handle } = mountBuilder([[0, 0, 0]]);
+    const toolbar = byClass(container, 'builder-toolbar')[0];
+    const rows = toolbar.children.filter((n) => (n.className ?? '').includes('builder-row'));
+    assert.equal(rows.length, 3, '工具条应是三行');
+    assert.deepEqual(rows.map((r) => r.className.split(' ').pop()),
+      ['builder-row--source', 'builder-row--tools', 'builder-row--views']);
+    for (const row of rows) {
+      const label = row.children.find((n) => (n.className ?? '').includes('builder-row-label'));
+      assert.ok(label?.textContent, '每行都要有小标题');
+    }
+    // 部件的操作控件应与来源选择同一屏出现，且都在「操作」行里
+    handle.setSource('parts');
+    const toolsRow = rows[1];
+    assert.ok(toolsRow.children.some((n) => (n.className ?? '').includes('builder-palette')), '部件库在操作行');
+    assert.ok(toolsRow.children.some((n) => (n.className ?? '').includes('builder-actions')), '撤销清空在操作行');
   });
 });
 

@@ -447,9 +447,21 @@ export function mountSolidBuilder(container, options = {}) {
   host.className = 'builder';
   container.append(host);
 
-  // ── 工具条 ────────────────────────────────────────────────────
+  // ── 工具条：三行，每行一个明确含义（内容来源 / 该来源的操作 / 看哪个视图）
   const toolbar = doc.createElement('div');
   toolbar.className = 'builder-toolbar';
+  const makeRow = (name, label) => {
+    const row = doc.createElement('div');
+    row.className = `builder-row builder-row--${name}`;
+    const tag = doc.createElement('span');
+    tag.className = 'builder-row-label';
+    tag.textContent = label;
+    row.append(tag);
+    return row;
+  };
+  const sourceRow = makeRow('source', '内容');
+  const toolsRow = makeRow('tools', '操作');
+  const viewRow = makeRow('views', '视图');
 
   // 内容来源：自己堆方块 / 从标准几何体里选一个
   const sources = doc.createElement('div');
@@ -469,7 +481,8 @@ export function mountSolidBuilder(container, options = {}) {
     sourceButtons.set(key, button);
     sources.append(button);
   }
-  toolbar.append(sources);
+  sourceRow.append(sources);
+  toolbar.append(sourceRow);
 
   const tabs = doc.createElement('div');
   tabs.className = 'builder-tabs';
@@ -484,7 +497,9 @@ export function mountSolidBuilder(container, options = {}) {
     tabButtons.set(key, button);
     tabs.append(button);
   }
-  toolbar.append(tabs);
+  viewRow.append(tabs);
+  toolbar.append(toolsRow);
+  toolbar.append(viewRow);
 
   const modes = doc.createElement('div');
   modes.className = 'builder-modes';
@@ -499,7 +514,7 @@ export function mountSolidBuilder(container, options = {}) {
     modeButtons.set(key, button);
     modes.append(button);
   }
-  toolbar.append(modes);
+  toolsRow.append(modes);
 
   const actions = doc.createElement('div');
   actions.className = 'builder-actions';
@@ -517,7 +532,7 @@ export function mountSolidBuilder(container, options = {}) {
   reset.textContent = '清空';
   reset.addEventListener('click', () => clear());
   actions.append(undo, reset);
-  toolbar.append(actions);
+  toolsRow.append(actions);
   host.append(toolbar);
 
   // ── 几何体库（仅「标准几何体」模式）─────────────────────────────
@@ -537,7 +552,7 @@ export function mountSolidBuilder(container, options = {}) {
     shapeButtons.set(solid.id, button);
     gallery.append(button);
   }
-  host.append(gallery);
+  toolsRow.append(gallery);
 
   // ── 部件库（仅「组合体」模式）：方块与标准几何体都能往上放 ────────
   const palette = doc.createElement('div');
@@ -553,7 +568,7 @@ export function mountSolidBuilder(container, options = {}) {
     partButtons.set(part.id, button);
     palette.append(button);
   }
-  host.append(palette);
+  toolsRow.append(palette);
 
   // ── 画布 + 三个实时视图 ───────────────────────────────────────
   const canvas = doc.createElement('div');
@@ -615,8 +630,13 @@ export function mountSolidBuilder(container, options = {}) {
       if (hit.kind === 'face' && hit.part !== null && hit.part !== undefined) {
         const target = parts[Number(hit.part)];
         if (target) {
-          // 叠放在被点部件的正上方（与它在 x / z 方向对齐）
-          placePartAt([target.at[0], target.at[1] + PART_BY_ID[target.id].size[1], target.at[2]]);
+          const support = PART_BY_ID[target.id].size;
+          const next = PART_BY_ID[partId].size;
+          // 叠放要**托得住**：上面部件的底面不能比下面的支撑面大。
+          // 否则会出现「2×2 的圆柱压在 1×1 的小方块上」——几何上不算穿插，
+          // 但画面上悬空外伸，看起来就是乱的（用户实测反馈「都放乱了」）。
+          if (next[0] > support[0] || next[2] > support[2]) return;
+          placePartAt([target.at[0], target.at[1] + support[1], target.at[2]]);
         }
       }
       return;

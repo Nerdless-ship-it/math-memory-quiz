@@ -21,10 +21,28 @@
 
 .builder-toolbar {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
 }
+
+/* 三行：内容（来源）/ 操作（该来源的控件）/ 视图（看哪个方向）。
+ * 每行带一个小标题，避免一堆按钮糊成一片——用户实测反馈「都放乱了」。 */
+.builder-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.builder-row-label {
+  flex: 0 0 auto;
+  min-width: 30px;
+  color: var(--muted, #66716d);
+  font-size: 11px;
+}
+
+.builder-row-label::after { content: '：'; }
 
 .builder-tabs { display: flex; gap: 6px; margin-right: auto; }
 .builder-modes,
