@@ -193,7 +193,7 @@ export function renderCompositeScene(parts, { yaw = 0, pitch = 0, width = 260, h
 
   for (const { part, index } of ordered) {
     for (const node of solidRotatedNodes(PART_BY_ID[part.id].view, {
-      at: part.at, yaw, pitch, toScreen,
+      at: part.at, yaw, pitch, toScreen, unit,
       attrs: () => ({ 'data-part': String(index) })
     })) {
       // 补上命中用的类名：点击判定靠 .builder-face + data-part（与方块模式同一套）

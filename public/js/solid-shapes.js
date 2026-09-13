@@ -417,10 +417,10 @@ export function solidRotatedNodes(solid, options = {}) {
   if (typeof toScreen !== 'function') throw new Error('solid-shapes: solidRotatedNodes 需要 toScreen');
   const attrsFor = typeof options.attrs === 'function' ? options.attrs : () => ({});
   const rotate = (p) => orbitPoint([p[0] + at[0], p[1] + at[1], p[2] + at[2]], yaw, pitch);
-  const project = (p) => {
-    const [x, y, z] = rotate(p);
-    return [x, -y, z];
-  };
+  // ⚠️ 这里返回**相机系原样**（不预先取负 y）：y 的翻转由调用方的 toScreen 统一做。
+  // 曾经在这里先取负、toScreen 又取负一次 —— 画出来的部件相对地面网格上下镜像，
+  // 表现为「方块浮在网格上方 / 几何体跑到画布外」（用户实测截图发现）。
+  const project = (p) => rotate(p);
 
   const nodes = [];
   for (const primitive of solidPrimitives(shape)) {
@@ -428,7 +428,10 @@ export function solidRotatedNodes(solid, options = {}) {
     if (primitive.kind === 'sphere') {
       const [cx, cy] = toScreen(rotate([0, 0, 0]));
       nodes.push(svgEl('circle', {
-        cx, cy, r: primitive.radius, class: 'figure-solid-face figure-cube-face--b', ...extra
+        cx, cy,
+        // ⚠️ 半径要乘比例尺：toScreen 只缩放坐标，半径得自己换算
+        r: primitive.radius * (Number.isFinite(options.unit) ? options.unit : 1),
+        class: 'figure-solid-face figure-cube-face--b', ...extra
       }));
       continue;
     }
@@ -479,10 +482,11 @@ export function solidRotatedPoints(solid, { at = [0, 0, 0], yaw = 0, pitch = 0 }
     for (const point of primitive.points ?? []) points.push(rotate(point));
   }
   if (shape.id === 'sphere') {
+    // 球的屏幕轮廓是**半径 r 的圆**：包围盒要按相机轴扩 r。
+    // 沿世界轴扩会被旋转投影缩水，实测球会越出画布。
     const r = shape.radius;
-    for (const offset of [[-r, 0, 0], [r, 0, 0], [0, -r, 0], [0, r, 0], [0, 0, 0]]) {
-      points.push(rotate(offset));
-    }
+    const c = rotate([0, 0, 0]);
+    points.push(c, [c[0] + r, c[1], c[2]], [c[0] - r, c[1], c[2]], [c[0], c[1] + r, c[2]], [c[0], c[1] - r, c[2]]);
   }
   return points;
 }
@@ -525,7 +529,7 @@ export function renderSolidRotated(solid, options = {}) {
   });
   svg.style.maxWidth = `${width}px`;
   svg.style.aspectRatio = `${width} / ${height}`;
-  for (const node of solidRotatedNodes(shape, { at, yaw, pitch, toScreen, attrs: options.attrs })) {
+  for (const node of solidRotatedNodes(shape, { at, yaw, pitch, toScreen, unit, attrs: options.attrs })) {
     svg.append(node);
   }
   return svg;
