@@ -1,0 +1,36 @@
+/* 组合立体（SDF）与切面的渲染样式。
+ *
+ * 类名由 solid-view.js 产生，改动时同步两个文件：
+ *   .solid-svg            立体视图与截面图共用的容器
+ *   .section-solid-fill   截面填充（evenodd ⇒ 洞自然被挖空）
+ *   .section-solid-stroke 截面边界（外轮廓 + 空心开口边）
+ *   .section-solid-label  无交时的提示文字
+ *
+ * ⚠️ 之前忘了写这个文件，结果 SVG 的 path 用了默认黑色填充 + 黑色描边，
+ * 截面只剩一个黑块，看不出「洞」在哪。截面图的表达力全靠 fill-rule 与描边对比。
+ */
+
+.solid-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* 截面实体：浅色填充 + 深色描边，环与洞靠 evenodd 表达 */
+.section-solid-fill {
+  fill: #dfe9e4;
+  stroke: none;
+}
+
+.section-solid-stroke {
+  fill: none;
+  stroke: var(--ink, #17231f);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+}
+
+.section-solid-label {
+  fill: var(--muted, #66716d);
+  font-family: "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-size: 12px;
+}
