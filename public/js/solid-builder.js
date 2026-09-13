@@ -27,8 +27,183 @@
 
 import { orthoViews, VIEW_LABELS } from './three-views.js';
 import {
-  SOLID_SHAPES, SOLID_BY_ID, solidViews, shapeLabel, renderShape, renderSolidRotated
+  SOLID_SHAPES, SOLID_BY_ID, solidViews, shapeLabel, shapeNodes, renderShape,
+  renderSolidRotated, solidRotatedNodes, solidRotatedPoints, polygonPath
 } from './solid-shapes.js';
+
+/**
+ * 组合体的部件目录：每个部件占几格（size，单位格）+ 它的几何定义（view）。
+ * 尺寸刻意取整数格，这样「放在地面上 / 叠在别的部件上」都有确定的位置，
+ * 也保证组合体的三个视图能按格子对齐画出来。
+ * ⚠️ 与题库图形的尺寸不同（题库圆柱高 1.8，这里高 2）——视图规则完全一样，
+ * 只是搭建器要整数格；solidViews 支持传尺寸覆盖。
+ */
+export const PART_CATALOG = Object.freeze([
+  { id: 'cube', name: '小方块', size: [1, 1, 1], view: { id: 'cuboid', width: 1, depth: 1, height: 1 } },
+  { id: 'brick', name: '长方体', size: [2, 1, 1], view: { id: 'cuboid', width: 2, depth: 1, height: 1 } },
+  { id: 'cylinder', name: '圆柱', size: [2, 2, 2], view: { id: 'cylinder', radius: 1, height: 2 } },
+  { id: 'cone', name: '圆锥', size: [2, 2, 2], view: { id: 'cone', radius: 1, height: 2 } },
+  { id: 'sphere', name: '球', size: [2, 2, 2], view: { id: 'sphere', radius: 1 } },
+  { id: 'prism3', name: '正三棱柱', size: [2, 2, 2], view: { id: 'prism3', sides: 3, radius: 1, height: 2 } },
+  { id: 'pyramid4', name: '正四棱锥', size: [2, 2, 2], view: { id: 'pyramid4', sides: 4, radius: 1, height: 2 } }
+]);
+
+export const PART_BY_ID = Object.freeze(Object.fromEntries(PART_CATALOG.map((p) => [p.id, p])));
+
+/** 两个部件的包围盒是否相交（组合体不允许穿插——穿插的立体图画不出来也说不清）。 */
+export function partsOverlap(a, b) {
+  const [ax, ay, az] = a.at;
+  const [aw, ah, ad] = PART_BY_ID[a.id].size;
+  const [bx, by, bz] = b.at;
+  const [bw, bh, bd] = PART_BY_ID[b.id].size;
+  return ax < bx + bw && bx < ax + aw
+    && ay < by + bh && by < ay + ah
+    && az < bz + bd && bz < az + ad;
+}
+
+/** 部件是否可以放在这个位置：在场景范围内、不与已有部件相交。 */
+export function canPlacePart(parts, candidate) {
+  const part = PART_BY_ID[candidate?.id];
+  if (!part) return false;
+  const [x, y, z] = candidate.at;
+  const [w, h, d] = part.size;
+  if (x < 0 || y < 0 || z < 0 || x + w > MAX_SIZE || z + d > MAX_SIZE || y + h > MAX_SIZE) return false;
+  return !parts.some((other) => partsOverlap(other, candidate));
+}
+
+/** 组合体的场景范围（格）：三个方向的已用尺寸，至少 1×1×1。 */
+export function partsExtent(parts) {
+  let width = 1;
+  let height = 1;
+  let depth = 1;
+  for (const part of parts) {
+    const [w, h, d] = PART_BY_ID[part.id].size;
+    width = Math.max(width, part.at[0] + w);
+    height = Math.max(height, part.at[1] + h);
+    depth = Math.max(depth, part.at[2] + d);
+  }
+  return { width, height, depth };
+}
+
+/**
+ * 组合体的三个视图：把每个部件的视图形状按它的位置摆进同一张二维图。
+ *
+ * 方向约定与 three-views.js 完全一致：
+ *   主视图：列 = x（向右），行从下往上对应 y（所以行号 = 场景高 − y）
+ *   俯视图：列 = x，行 = z（向下 = 向前）
+ *   左视图：列 = z（向右 = 向前），行同上（从下往上对应 y）
+ *
+ * @returns {{ front: object, top: object, left: object }}
+ *   每个视图 = { cols, rows, shapes: [{ shape, center: [col, row] }] }
+ */
+export function compositeViews(parts) {
+  const { width, height, depth } = partsExtent(parts);
+  const views = {
+    front: { cols: width, rows: height, shapes: [] },
+    top: { cols: width, rows: depth, shapes: [] },
+    left: { cols: depth, rows: height, shapes: [] }
+  };
+  for (const part of parts) {
+    const [w, h, d] = PART_BY_ID[part.id].size;
+    const [px, py, pz] = part.at;
+    const shapes = solidViews(PART_BY_ID[part.id].view);
+    views.front.shapes.push({ shape: shapes.front, center: [px + w / 2, height - py - h / 2] });
+    views.top.shapes.push({ shape: shapes.top, center: [px + w / 2, pz + d / 2] });
+    views.left.shapes.push({ shape: shapes.left, center: [pz + d / 2, height - py - h / 2] });
+  }
+  return views;
+}
+
+/** 画组合体的某个视图（多个形状摆进同一张图，按格定位）。 */
+export function renderCompositeView(view, { cell = 34, pad = 10, className } = {}) {
+  const width = Math.round(view.cols * cell + pad * 2);
+  const height = Math.round(view.rows * cell + pad * 2);
+  const svg = svgEl('svg', {
+    viewBox: `0 0 ${width} ${height}`,
+    width: '100%',
+    preserveAspectRatio: 'xMidYMid meet',
+    role: 'img',
+    'aria-label': `组合体视图：${view.cols} 列 ${view.rows} 行，由 ${view.shapes.length} 个部件拼成`,
+    class: 'builder-view-svg'
+  });
+  svg.style.maxWidth = `${width}px`;
+  svg.style.aspectRatio = `${width} / ${height}`;
+  for (const { shape, center } of view.shapes) {
+    for (const node of shapeNodes(shape, pad + center[0] * cell, pad + center[1] * cell, cell, className)) {
+      svg.append(node);
+    }
+  }
+  return svg;
+}
+
+/** 画组合体的立体场景：地面网格 + 各部件（按相机深度从远到近）。 */
+export function renderCompositeScene(parts, { yaw = 0, pitch = 0, width = 260, height = 240 } = {}) {
+  // 场景范围固定为 MAX_SIZE 的方盒 + 实际用到的部分，保证加部件时画面不跳
+  const corners = [];
+  for (const x of [0, MAX_SIZE]) {
+    for (const y of [0, MAX_SIZE]) {
+      for (const z of [0, MAX_SIZE]) corners.push(orbit([x, y, z], yaw, pitch));
+    }
+  }
+  const minX = Math.min(...corners.map((p) => p[0]));
+  const maxX = Math.max(...corners.map((p) => p[0]));
+  const minY = Math.min(...corners.map((p) => -p[1]));
+  const maxY = Math.max(...corners.map((p) => -p[1]));
+  const pad = 12;
+  const unit = Math.min(
+    (width - pad * 2) / Math.max(maxX - minX, 1e-6),
+    (height - pad * 2) / Math.max(maxY - minY, 1e-6)
+  );
+  const canvasW = Math.round((maxX - minX) * unit + pad * 2);
+  const canvasH = Math.round((maxY - minY) * unit + pad * 2);
+  const toScreen = ([x, y, z]) => [(x - minX) * unit + pad, (-y - minY) * unit + pad];
+
+  const svg = svgEl('svg', {
+    viewBox: `0 0 ${canvasW} ${canvasH}`,
+    width: '100%',
+    preserveAspectRatio: 'xMidYMid meet',
+    role: 'img',
+    'aria-label': `组合体：${parts.length} 个部件，可拖动旋转、点击地面或部件放置`,
+    class: 'builder-scene'
+  });
+  svg.style.maxWidth = `${canvasW}px`;
+  svg.style.aspectRatio = `${canvasW} / ${canvasH}`;
+
+  // 地面网格（点空格子在地面放部件）
+  for (let x = 0; x < MAX_SIZE; x += 1) {
+    for (let z = 0; z < MAX_SIZE; z += 1) {
+      const pts = [[x, 0, z], [x + 1, 0, z], [x + 1, 0, z + 1], [x, 0, z + 1]].map((p) => toScreen(orbit(p, yaw, pitch)));
+      svg.append(svgEl('path', {
+        d: polygonPath(pts),
+        class: 'builder-ground',
+        'data-ground': `${x},${z}`
+      }));
+    }
+  }
+
+  // 部件按相机深度（远 → 近）画；每个面挂 data-part 供点击叠放
+  const ordered = parts
+    .map((part, index) => {
+      const [w, h, d] = PART_BY_ID[part.id].size;
+      const center = [part.at[0] + w / 2, part.at[1] + h / 2, part.at[2] + d / 2];
+      const [, , depth] = orbit(center, yaw, pitch);
+      return { part, index, depth };
+    })
+    .sort((a, b) => a.depth - b.depth);
+
+  for (const { part, index } of ordered) {
+    for (const node of solidRotatedNodes(PART_BY_ID[part.id].view, {
+      at: part.at, yaw, pitch, toScreen,
+      attrs: () => ({ 'data-part': String(index) })
+    })) {
+      // 补上命中用的类名：点击判定靠 .builder-face + data-part（与方块模式同一套）
+      const classes = node.getAttribute('class') ?? '';
+      node.setAttribute('class', `${classes} builder-face`.trim());
+      svg.append(node);
+    }
+  }
+  return svg;
+}
 
 export const MAX_SIZE = 4;
 export const DEFAULT_VIEW = Object.freeze({ yaw: -32, pitch: 26 });
@@ -254,15 +429,18 @@ export function mountSolidBuilder(container, options = {}) {
   let cubes = Array.isArray(options.cubes) && options.cubes.length > 0
     ? options.cubes.map((cube) => [...cube])
     : [[0, 0, 0], [1, 0, 0], [0, 1, 0]];
-  let history = [];
   const view = {
     yaw: clamp(options.yaw ?? DEFAULT_VIEW.yaw, VIEW_LIMITS.yaw),
     pitch: clamp(options.pitch ?? DEFAULT_VIEW.pitch, PITCH_LIMIT)
   };
   let mode = 'add'; // add | remove（仅「自由搭建」模式）
   let tab = 'solid'; // solid | front | top | left
-  let source = options.source === 'shapes' ? 'shapes' : 'cubes'; // cubes = 堆方块；shapes = 选几何体
+  let source = ['cubes', 'shapes', 'parts'].includes(options.source) ? options.source : 'cubes';
   let shapeId = SOLID_BY_ID[options.shape] ? options.shape : SOLID_SHAPES[0].id;
+  let parts = []; // 组合体：[{ id, at: [x, y, z] }]
+  let partId = PART_BY_ID[options.part] ? options.part : 'cube';
+  // 撤销栈存的是两种模型的快照（方块模式用 cubes、组合体模式用 parts）
+  let history = [];
   let drag = null;
 
   const host = doc.createElement('div');
@@ -279,7 +457,8 @@ export function mountSolidBuilder(container, options = {}) {
   const sourceButtons = new Map();
   for (const [key, text, hint] of [
     ['cubes', '自由搭建', '自己用小方块搭立体'],
-    ['shapes', '标准几何体', '从圆柱、圆锥、球等几何体里选一个看它的三视图']
+    ['shapes', '标准几何体', '从圆柱、圆锥、球等几何体里选一个看它的三视图'],
+    ['parts', '组合体', '把方块和圆柱、圆锥等拼在一起，看组合体的三视图']
   ]) {
     const button = doc.createElement('button');
     button.type = 'button';
@@ -330,7 +509,7 @@ export function mountSolidBuilder(container, options = {}) {
   undo.textContent = '撤销';
   undo.addEventListener('click', () => {
     const previous = history.pop();
-    if (previous) { cubes = previous; draw(); }
+    if (previous) { cubes = previous.cubes; parts = previous.parts; draw(); }
   });
   const reset = doc.createElement('button');
   reset.type = 'button';
@@ -360,6 +539,22 @@ export function mountSolidBuilder(container, options = {}) {
   }
   host.append(gallery);
 
+  // ── 部件库（仅「组合体」模式）：方块与标准几何体都能往上放 ────────
+  const palette = doc.createElement('div');
+  palette.className = 'builder-palette';
+  const partButtons = new Map();
+  for (const part of PART_CATALOG) {
+    const button = doc.createElement('button');
+    button.type = 'button';
+    button.className = 'builder-part';
+    button.textContent = part.name;
+    button.setAttribute('aria-label', `放置${part.name}`);
+    button.addEventListener('click', () => setPart(part.id));
+    partButtons.set(part.id, button);
+    palette.append(button);
+  }
+  host.append(palette);
+
   // ── 画布 + 三个实时视图 ───────────────────────────────────────
   const canvas = doc.createElement('div');
   canvas.className = 'builder-canvas';
@@ -385,31 +580,65 @@ export function mountSolidBuilder(container, options = {}) {
   function hitFromEvent(event) {
     let node = event?.target;
     const face = node?.closest?.('.builder-face');
-    if (face) return { kind: 'face', cube: face.getAttribute('data-cube'), dir: face.getAttribute('data-dir') };
+    if (face) {
+      return {
+        kind: 'face',
+        cube: face.getAttribute('data-cube'),
+        dir: face.getAttribute('data-dir'),
+        part: face.getAttribute('data-part')
+      };
+    }
     const ground = node?.closest?.('.builder-ground');
     if (ground) return { kind: 'ground', cell: ground.getAttribute('data-ground') };
     return null;
   }
 
+  /** 组合体：在指定位置放一个当前选中的部件（越界 / 相交则忽略）。 */
+  function placePartAt(at) {
+    const candidate = { id: partId, at };
+    if (!canPlacePart(parts, candidate)) return false;
+    history.push({ cubes, parts });
+    parts = [...parts, candidate];
+    draw();
+    return true;
+  }
+
   function applyHit(hit) {
     if (!hit) return;
+
+    if (source === 'parts') {
+      if (hit.kind === 'ground') {
+        const [x, z] = hit.cell.split(',').map(Number);
+        placePartAt([x, 0, z]);
+        return;
+      }
+      if (hit.kind === 'face' && hit.part !== null && hit.part !== undefined) {
+        const target = parts[Number(hit.part)];
+        if (target) {
+          // 叠放在被点部件的正上方（与它在 x / z 方向对齐）
+          placePartAt([target.at[0], target.at[1] + PART_BY_ID[target.id].size[1], target.at[2]]);
+        }
+      }
+      return;
+    }
+
     if (source === 'shapes') return; // 几何体模式下不可增删（没有方块可编辑）
     if (mode === 'remove') {
       if (hit.kind !== 'face') return;
       const next = removeCube(cubes, hit.cube.split(',').map(Number));
-      if (next !== cubes) { history.push(cubes); cubes = next; draw(); }
+      if (next !== cubes) { history.push({ cubes, parts }); cubes = next; draw(); }
       return;
     }
     if (hit.kind === 'face') {
       const direction = FACE_DIRECTIONS.find((d) => d.key === hit.dir);
       if (!direction) return;
       const next = addCube(cubes, neighborAcross(hit.cube.split(',').map(Number), direction.normal));
-      if (next !== cubes) { history.push(cubes); cubes = next; draw(); }
+      if (next !== cubes) { history.push({ cubes, parts }); cubes = next; draw(); }
       return;
     }
     const [x, z] = hit.cell.split(',').map(Number);
     const next = addCube(cubes, [x, 0, z]);
-    if (next !== cubes) { history.push(cubes); cubes = next; draw(); }
+    if (next !== cubes) { history.push({ cubes, parts }); cubes = next; draw(); }
   }
 
   canvas.addEventListener('pointerdown', (event) => {
@@ -447,7 +676,7 @@ export function mountSolidBuilder(container, options = {}) {
     if (source === 'shapes') return;
     if (hit?.kind === 'face') {
       const next = removeCube(cubes, hit.cube.split(',').map(Number));
-      if (next !== cubes) { history.push(cubes); cubes = next; draw(); }
+      if (next !== cubes) { history.push({ cubes, parts }); cubes = next; draw(); }
     }
   });
   canvas.addEventListener('keydown', (event) => {
@@ -464,25 +693,36 @@ export function mountSolidBuilder(container, options = {}) {
   // ── 绘制 ──────────────────────────────────────────────────────
   function draw() {
     const isShapes = source === 'shapes';
+    const isParts = source === 'parts';
     // 方块模式：空立体是合法状态（刚清空），几何层不接受空数组，所以单独处理
-    const cubeViews = !isShapes && cubes.length > 0 ? orthoViews(cubes) : null;
+    const cubeViews = !isShapes && !isParts && cubes.length > 0 ? orthoViews(cubes) : null;
     const shapeViewData = isShapes ? solidViews(shapeId) : null;
     const shape = isShapes ? SOLID_BY_ID[shapeId] : null;
+    const partViewData = isParts && parts.length > 0 ? compositeViews(parts) : null;
 
     for (const [key, button] of tabButtons) button.setAttribute('aria-pressed', String(key === tab));
     for (const [key, button] of sourceButtons) button.setAttribute('aria-pressed', String(key === source));
     for (const [key, button] of modeButtons) button.setAttribute('aria-pressed', String(key === mode));
     for (const [key, button] of shapeButtons) button.setAttribute('aria-pressed', String(key === shapeId));
-    modes.hidden = isShapes; // 加/删方块只对「自由搭建」有意义
-    actions.hidden = isShapes; // 撤销 / 清空同理
+    for (const [key, button] of partButtons) button.setAttribute('aria-pressed', String(key === partId));
+    modes.hidden = isShapes || isParts; // 加/删方块只对「自由搭建」有意义
+    actions.hidden = isShapes; // 撤销 / 清空：方块与组合体都有意义
     gallery.hidden = !isShapes;
+    palette.hidden = !isParts;
     hint.textContent = isShapes
       ? '拖动可旋转观察方向，点上面一排几何体换一个。三个视图由立体本身决定——转动观察方向，它们不会变。'
-      : '拖动可旋转观察方向；点某个面在那一侧加方块，点地面在地面加方块。'
-        + '三个视图由立体本身决定——转动观察方向，它们不会变。';
+      : isParts
+        ? '点地面的格子放置部件，点已有部件把它叠在上面（x / z 方向自动对齐）；拖动可旋转观察方向。'
+          + '三个视图由组合体本身决定——转动观察方向，它们不会变。'
+        : '拖动可旋转观察方向；点某个面在那一侧加方块，点地面在地面加方块。'
+          + '三个视图由立体本身决定——转动观察方向，它们不会变。';
 
     canvas.replaceChildren();
-    if (isShapes) {
+    if (isParts) {
+      canvas.append(tab === 'solid' || !partViewData
+        ? renderCompositeScene(parts, { yaw: view.yaw, pitch: view.pitch, width: 260, height: 240 })
+        : renderCompositeView(partViewData[tab], { cell: CELL }));
+    } else if (isShapes) {
       canvas.append(tab === 'solid'
         ? renderSolidRotated(shapeId, { yaw: view.yaw, pitch: view.pitch, width: 260, height: 240 })
         : renderShape(shapeViewData[tab], { unit: 46 }));
@@ -502,7 +742,16 @@ export function mountSolidBuilder(container, options = {}) {
       title.className = 'builder-strip-title';
       title.textContent = VIEW_LABELS[name];
       cell.append(title);
-      if (isShapes) {
+      if (isParts) {
+        if (partViewData) {
+          cell.append(renderCompositeView(partViewData[name], { cell: 20, pad: 6 }));
+        } else {
+          const empty = doc.createElement('div');
+          empty.className = 'builder-strip-empty';
+          empty.textContent = '还没有部件';
+          cell.append(empty);
+        }
+      } else if (isShapes) {
         cell.append(renderShape(shapeViewData[name], { unit: 18, pad: 6 }));
       } else if (cubeViews) {
         cell.append(renderGridView(cubeViews[name], { cell: 22, pad: 4, className: 'builder-view-cell' }));
@@ -513,6 +762,21 @@ export function mountSolidBuilder(container, options = {}) {
         cell.append(empty);
       }
       strip.append(cell);
+    }
+
+    if (isParts) {
+      const counts = new Map();
+      for (const part of parts) counts.set(part.id, (counts.get(part.id) ?? 0) + 1);
+      const list = [...counts.entries()].map(([id, n]) => `${PART_BY_ID[id].name}×${n}`).join('、');
+      status.textContent = parts.length === 0
+        ? `当前选中：${PART_BY_ID[partId].name}——点地面上的格子开始拼`
+        : `当前有 ${parts.length} 个部件：${list}`;
+      canvas.setAttribute('aria-label', parts.length === 0
+        ? `组合体画布：还没有部件。当前选中${PART_BY_ID[partId].name}，点地面上的格子开始拼。`
+        : `组合体画布：${list}。主视图 ${partViewData.front.cols} 列 ${partViewData.front.rows} 行。`
+          + `俯视图 ${partViewData.top.cols} 列 ${partViewData.top.rows} 行。`
+          + `左视图 ${partViewData.left.cols} 列 ${partViewData.left.rows} 行。拖动或方向键旋转观察方向。`);
+      return;
     }
 
     if (isShapes) {
@@ -534,8 +798,14 @@ export function mountSolidBuilder(container, options = {}) {
   }
 
   function setSource(next) {
-    if (!['cubes', 'shapes'].includes(next) || next === source) return;
+    if (!['cubes', 'shapes', 'parts'].includes(next) || next === source) return;
     source = next;
+    draw();
+  }
+
+  function setPart(next) {
+    if (!PART_BY_ID[next]) return;
+    partId = next;
     draw();
   }
 
@@ -556,13 +826,14 @@ export function mountSolidBuilder(container, options = {}) {
     draw();
   }
   function clear() {
-    history.push(cubes);
-    cubes = [];
+    history.push({ cubes, parts });
+    if (source === 'parts') parts = [];
+    else cubes = [];
     draw();
   }
   function setCubes(next) {
     if (!Array.isArray(next)) return;
-    history.push(cubes);
+    history.push({ cubes, parts });
     cubes = next.map((cube) => [...cube]);
     draw();
   }
@@ -576,10 +847,20 @@ export function mountSolidBuilder(container, options = {}) {
     setMode,
     setSource,
     setShape,
+    setPart,
+    placePart: (id, at) => {
+      const previous = partId;
+      if (PART_BY_ID[id]) partId = id;
+      const ok = placePartAt(at);
+      partId = previous;
+      return ok;
+    },
+    getParts: () => parts.map((part) => ({ id: part.id, at: [...part.at] })),
     clear,
     get view() { return { ...view }; },
     get source() { return source; },
     get shape() { return shapeId; },
+    get part() { return partId; },
     root: host,
     destroy() { host.remove(); }
   };

@@ -62,8 +62,11 @@ export const sideLength = (radius, sides) => 2 * radius * Math.sin(Math.PI / sid
  */
 export function solidViews(solid) {
   const id = typeof solid === 'string' ? solid : solid?.id;
-  const shape = SOLID_BY_ID[id];
-  if (!shape) throw new Error(`solid-shapes: 未知立体 "${id}"，可用：${SOLID_SHAPES.map((s) => s.id).join(', ')}`);
+  const base = SOLID_BY_ID[id];
+  if (!base) throw new Error(`solid-shapes: 未知立体 "${id}"，可用：${SOLID_SHAPES.map((s) => s.id).join(', ')}`);
+  // 允许调用方覆盖尺寸：搭建器的组合体用整数格尺寸（如圆柱 r=1、h=2），
+  // 与题库图形的尺寸（h=1.8）不同，但视图规则完全一样。
+  const shape = typeof solid === 'string' ? base : { ...base, ...solid };
 
   if (id === 'cylinder') {
     const rect = { kind: 'rect', width: 2 * shape.radius, height: shape.height };
@@ -147,6 +150,47 @@ function polygonPoints({ sides, radius, spin = 0 }) {
 }
 
 /**
+ * 把形状画到给定中心点（供组合体视图复用；单位 = 每个「单位长度」多少像素）。
+ * 返回节点数组，调用方决定塞进哪个 <svg>。
+ */
+export function shapeNodes(shape, cx, cy, unit, className = 'figure-view-shape') {
+  const nodes = [];
+  if (shape.kind === 'circle') {
+    nodes.push(svgEl('circle', { cx, cy, r: shape.radius * unit, class: className }));
+  } else if (shape.kind === 'ellipse') {
+    nodes.push(svgEl('ellipse', { cx, cy, rx: shape.rx * unit, ry: shape.ry * unit, class: className }));
+  } else if (shape.kind === 'rect') {
+    nodes.push(svgEl('rect', {
+      x: cx - (shape.width * unit) / 2,
+      y: cy - (shape.height * unit) / 2,
+      width: shape.width * unit,
+      height: shape.height * unit,
+      class: className
+    }));
+  } else if (shape.kind === 'triangle') {
+    nodes.push(svgEl('path', {
+      d: polygonPath([
+        [cx, cy - (shape.height * unit) / 2],
+        [cx + (shape.base * unit) / 2, cy + (shape.height * unit) / 2],
+        [cx - (shape.base * unit) / 2, cy + (shape.height * unit) / 2]
+      ]),
+      class: className
+    }));
+  } else if (shape.kind === 'polygon') {
+    const points = polygonPoints(shape).map(([x, y]) => [cx + x * unit, cy + y * unit]);
+    nodes.push(svgEl('path', { d: polygonPath(points), class: className }));
+    if (shape.spokes) {
+      for (const [x, y] of points) {
+        nodes.push(svgEl('line', { x1: cx, y1: cy, x2: x, y2: y, class: `${className}-spoke` }));
+      }
+    }
+  } else {
+    throw new Error(`solid-shapes: 未知形状 "${shape?.kind}"`);
+  }
+  return nodes;
+}
+
+/**
  * 画一个视图形状（二维）。
  * @param {object} shape solidViews() 返回的形状描述
  * @param {{ unit?: number, pad?: number, className?: string }} [options]
@@ -172,40 +216,7 @@ export function renderShape(shape, options = {}) {
   });
   svg.style.maxWidth = `${width}px`;
   svg.style.aspectRatio = `${width} / ${height}`;
-
-  if (shape.kind === 'circle') {
-    svg.append(svgEl('circle', { cx, cy, r: shape.radius * unit, class: className }));
-  } else if (shape.kind === 'ellipse') {
-    // 椭圆只会作为**干扰项**出现：它正是「斜着看一个圆」的样子，
-    // 也就是把立体图的观感当成俯视图的典型错误。
-    svg.append(svgEl('ellipse', { cx, cy, rx: shape.rx * unit, ry: shape.ry * unit, class: className }));
-  } else if (shape.kind === 'rect') {
-    svg.append(svgEl('rect', {
-      x: cx - (shape.width * unit) / 2,
-      y: cy - (shape.height * unit) / 2,
-      width: shape.width * unit,
-      height: shape.height * unit,
-      class: className
-    }));
-  } else if (shape.kind === 'triangle') {
-    const points = [
-      [cx, cy - (shape.height * unit) / 2], // 顶点朝上
-      [cx + (shape.base * unit) / 2, cy + (shape.height * unit) / 2],
-      [cx - (shape.base * unit) / 2, cy + (shape.height * unit) / 2]
-    ];
-    svg.append(svgEl('path', { d: polygonPath(points), class: className }));
-  } else if (shape.kind === 'polygon') {
-    const points = polygonPoints(shape).map(([x, y]) => [cx + x * unit, cy + y * unit]);
-    svg.append(svgEl('path', { d: polygonPath(points), class: className }));
-    if (shape.spokes) {
-      // 棱锥的俯视图：从中心连到每个顶点（教材画法，也是学生判断棱数的依据）
-      for (const [x, y] of points) {
-        svg.append(svgEl('line', { x1: cx, y1: cy, x2: x, y2: y, class: `${className}-spoke` }));
-      }
-    }
-  } else {
-    throw new Error(`solid-shapes: 未知形状 "${shape?.kind}"`);
-  }
+  for (const node of shapeNodes(shape, cx, cy, unit, className)) svg.append(node);
   return svg;
 }
 
@@ -233,7 +244,10 @@ function svgEl(tagName, attributes = {}, text) {
   return node;
 }
 
-const polygonPath = (points) => `M${points.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join('L')}Z`;
+/** 点列 → SVG 路径（组合体渲染在搭建器里也要用，所以导出）。 */
+export function polygonPath(points) {
+  return `M${points.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join('L')}Z`;
+}
 
 /** 圆采样（水平面上的圆：y 固定）。 */
 function circleSamples(radius, y, samples = CIRCLE_SAMPLES) {
@@ -383,36 +397,112 @@ export function orbitPoint([x, y, z], yawDeg = 0, pitchDeg = 0) {
 }
 
 /**
- * 可旋转的立体画法（搭建器用）：正交投影 + 按旋转后的法向判可见性。
+ * 可旋转画法的**节点级**接口：把立体画成一组 SVG 节点，投影由调用方提供。
+ * 组合体要把多个部件画进同一张画布、共享同一套比例与偏移，所以必须有这一层——
+ * 否则每个部件各自算一遍包围盒，拼起来大小对不上。
+ *
+ * @param {object|string} solid 立体（可带尺寸覆盖，如 { id: 'cylinder', radius: 1, height: 2 }）
+ * @param {{ at?: number[], yaw?: number, pitch?: number, toScreen: Function, attrs?: Function }} options
+ *   at        —— 部件在网格里的位置（世界坐标偏移）
+ *   toScreen  —— 相机系点 [x,y,z] → 屏幕 [x,y]（调用方负责比例与居中）
+ *   attrs     —— (primitive) => 额外属性（搭建器用来挂 data-part 命中信息）
+ * @returns {Array<SVGElement>}
+ */
+export function solidRotatedNodes(solid, options = {}) {
+  const shape = resolveShape(solid);
+  const at = Array.isArray(options.at) ? options.at : [0, 0, 0];
+  const yaw = Number.isFinite(options.yaw) ? options.yaw : 0;
+  const pitch = Number.isFinite(options.pitch) ? options.pitch : 0;
+  const toScreen = options.toScreen;
+  if (typeof toScreen !== 'function') throw new Error('solid-shapes: solidRotatedNodes 需要 toScreen');
+  const attrsFor = typeof options.attrs === 'function' ? options.attrs : () => ({});
+  const rotate = (p) => orbitPoint([p[0] + at[0], p[1] + at[1], p[2] + at[2]], yaw, pitch);
+  const project = (p) => {
+    const [x, y, z] = rotate(p);
+    return [x, -y, z];
+  };
+
+  const nodes = [];
+  for (const primitive of solidPrimitives(shape)) {
+    const extra = attrsFor(primitive) ?? {};
+    if (primitive.kind === 'sphere') {
+      const [cx, cy] = toScreen(rotate([0, 0, 0]));
+      nodes.push(svgEl('circle', {
+        cx, cy, r: primitive.radius, class: 'figure-solid-face figure-cube-face--b', ...extra
+      }));
+      continue;
+    }
+    if (primitive.kind === 'equator') {
+      const points = [...Array(CIRCLE_SAMPLES)].map((_, i) => {
+        const angle = (2 * Math.PI * i) / CIRCLE_SAMPLES;
+        return toScreen(project([primitive.radius * Math.cos(angle), 0, primitive.radius * Math.sin(angle)]));
+      });
+      nodes.push(svgEl('path', { d: polygonPath(points), class: 'figure-solid-equator', ...extra }));
+      continue;
+    }
+    if (primitive.normal) {
+      const [nx, , nz] = orbitPoint(primitive.normal, yaw, pitch);
+      if (nz <= 1e-6) continue; // 转过去的面不画
+      const shade = nz > 0.75 ? 'a' : nz > 0.3 ? 'b' : 'c';
+      nodes.push(svgEl('path', {
+        d: polygonPath(primitive.points.map((p) => toScreen(project(p)))),
+        class: `figure-solid-face figure-cube-face--${shade}`,
+        ...extra
+      }));
+      continue;
+    }
+    const points = primitive.kind === 'hull'
+      ? convexHull(primitive.points.map((p) => toScreen(project(p))))
+      : primitive.points.map((p) => toScreen(project(p)));
+    nodes.push(svgEl('path', {
+      d: polygonPath(points),
+      class: `figure-solid-face${primitive.shade ? ` figure-cube-face--${primitive.shade}` : ''}${primitive.strokeOnly ? ' figure-solid-outline' : ''}`,
+      ...extra
+    }));
+  }
+  return nodes;
+}
+
+function resolveShape(solid) {
+  const id = typeof solid === 'string' ? solid : solid?.id;
+  const base = SOLID_BY_ID[id];
+  if (!base) throw new Error(`solid-shapes: 未知立体 "${id}"`);
+  return typeof solid === 'string' ? base : { ...base, ...solid };
+}
+
+/** 立体在相机系里的所有投影点（用于求包围盒；含球的轮廓四点）。 */
+export function solidRotatedPoints(solid, { at = [0, 0, 0], yaw = 0, pitch = 0 } = {}) {
+  const shape = resolveShape(solid);
+  const rotate = (p) => orbitPoint([p[0] + at[0], p[1] + at[1], p[2] + at[2]], yaw, pitch);
+  const points = [];
+  for (const primitive of solidPrimitives(shape)) {
+    for (const point of primitive.points ?? []) points.push(rotate(point));
+  }
+  if (shape.id === 'sphere') {
+    const r = shape.radius;
+    for (const offset of [[-r, 0, 0], [r, 0, 0], [0, -r, 0], [0, r, 0], [0, 0, 0]]) {
+      points.push(rotate(offset));
+    }
+  }
+  return points;
+}
+
+/**
+ * 可旋转的立体画法（搭建器单个几何体时用）：正交投影 + 按旋转后的法向判可见性。
  * 与 renderSolid3d 的区别：那个用固定的斜二测视角（题库图要统一、不能变），
  * 这个跟着 yaw / pitch 转，屏幕坐标就是相机系坐标、深度用于排序。
  */
 export function renderSolidRotated(solid, options = {}) {
-  const shape = SOLID_BY_ID[typeof solid === 'string' ? solid : solid?.id];
-  if (!shape) throw new Error(`solid-shapes: 未知立体 "${solid?.id ?? solid}"`);
+  const shape = resolveShape(solid);
   const yaw = Number.isFinite(options.yaw) ? options.yaw : 0;
   const pitch = Number.isFinite(options.pitch) ? options.pitch : 0;
-  const primitives = solidPrimitives(shape);
-  const rotate = (p) => orbitPoint(p, yaw, pitch);
-  const project2 = (p) => {
-    const [x, y, z] = rotate(p);
-    return { x, y: -y, depth: z };
-  };
+  const at = Array.isArray(options.at) ? options.at : [0, 0, 0];
+  const points = solidRotatedPoints(shape, { at, yaw, pitch });
 
-  // 包围盒：用所有图元顶点（球另外补轮廓四点）
-  const projected = [];
-  for (const primitive of primitives) {
-    for (const point of primitive.points ?? []) projected.push(project2(point));
-  }
-  if (shape.id === 'sphere') {
-    for (const offset of [[-shape.radius, 0, 0], [shape.radius, 0, 0], [0, -shape.radius, 0], [0, shape.radius, 0]]) {
-      projected.push(project2(offset));
-    }
-  }
-  const minX = Math.min(...projected.map((p) => p.x));
-  const maxX = Math.max(...projected.map((p) => p.x));
-  const minY = Math.min(...projected.map((p) => p.y));
-  const maxY = Math.max(...projected.map((p) => p.y));
+  const minX = Math.min(...points.map((p) => p[0]));
+  const maxX = Math.max(...points.map((p) => p[0]));
+  const minY = Math.min(...points.map((p) => -p[1]));
+  const maxY = Math.max(...points.map((p) => -p[1]));
   const pad = 14;
   const unit = Math.min(
     (options.width ?? 260) / Math.max(maxX - minX, 1e-6),
@@ -420,9 +510,9 @@ export function renderSolidRotated(solid, options = {}) {
   );
   const width = Math.round((maxX - minX) * unit + pad * 2);
   const height = Math.round((maxY - minY) * unit + pad * 2);
-  const toScreen = (p) => {
-    const q = project2(p);
-    return [(q.x - minX) * unit + pad, (q.y - minY) * unit + pad];
+  const toScreen = ([x, y, z]) => {
+    void z;
+    return [(x - minX) * unit + pad, (-y - minY) * unit + pad];
   };
 
   const svg = svgEl('svg', {
@@ -435,36 +525,8 @@ export function renderSolidRotated(solid, options = {}) {
   });
   svg.style.maxWidth = `${width}px`;
   svg.style.aspectRatio = `${width} / ${height}`;
-
-  const drawPoly = (points, className) => svg.append(svgEl('path', { d: polygonPath(points), class: className }));
-
-  for (const primitive of primitives) {
-    if (primitive.kind === 'sphere') {
-      const center = toScreen([0, 0, 0]);
-      svg.append(svgEl('circle', {
-        cx: center[0], cy: center[1], r: primitive.radius * unit,
-        class: 'figure-solid-face figure-cube-face--b'
-      }));
-      continue;
-    }
-    if (primitive.kind === 'equator') {
-      drawPoly([...Array(CIRCLE_SAMPLES)].map((_, i) => {
-        const angle = (2 * Math.PI * i) / CIRCLE_SAMPLES;
-        return toScreen([primitive.radius * Math.cos(angle), 0, primitive.radius * Math.sin(angle)]);
-      }), 'figure-solid-equator');
-      continue;
-    }
-    if (primitive.normal) {
-      const [nx, ny, nz] = orbitPoint(primitive.normal, yaw, pitch);
-      if (nz <= 1e-6) continue; // 转过去的面不画
-      const shade = nz > 0.75 ? 'a' : nz > 0.3 ? 'b' : 'c';
-      drawPoly(primitive.points.map(toScreen), `figure-solid-face figure-cube-face--${shade}`);
-      continue;
-    }
-    const points = primitive.kind === 'hull'
-      ? convexHull(primitive.points.map(toScreen))
-      : primitive.points.map(toScreen);
-    drawPoly(points, `figure-solid-face${primitive.shade ? ` figure-cube-face--${primitive.shade}` : ''}${primitive.strokeOnly ? ' figure-solid-outline' : ''}`);
+  for (const node of solidRotatedNodes(shape, { at, yaw, pitch, toScreen, attrs: options.attrs })) {
+    svg.append(node);
   }
   return svg;
 }

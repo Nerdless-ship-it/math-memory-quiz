@@ -18,9 +18,18 @@ import {
   mountSolidBuilder,
   MAX_SIZE,
   DEFAULT_VIEW,
-  VIEW_LIMITS
+  VIEW_LIMITS,
+  PART_CATALOG,
+  PART_BY_ID,
+  partsOverlap,
+  canPlacePart,
+  partsExtent,
+  compositeViews,
+  renderCompositeView,
+  renderCompositeScene
 } from '../public/js/solid-builder.js';
 import { orthoViews, viewKey } from '../public/js/three-views.js';
+import { solidViews } from '../public/js/solid-shapes.js';
 
 // ── 极简 DOM stub（带 parent 链，closest 才能穿过 SVG 节点）───────────────
 function makeStubDocument() {
@@ -428,6 +437,153 @@ test('几何体模式：点面不会加方块（此模式没有方块可编辑�
     const anyShape = byClass(container, 'figure-view-shape')[0] ?? canvas;
     click(anyShape);
     assert.equal(handle.getCubes().length, before, '几何体模式下点面不应加方块');
+  });
+});
+
+// ── ⑤ 组合体（方块 + 标准几何体拼在一起）────────────────────────────────
+
+test('组合体几何：部件目录与尺寸、相交判定、场景范围', () => {
+  assert.ok(PART_CATALOG.length >= 7, '部件目录应含方块与标准几何体');
+  for (const part of PART_CATALOG) {
+    assert.ok(part.size.every((v) => Number.isInteger(v) && v > 0), `${part.name} 的尺寸必须是正整数格`);
+    assert.ok(solidViews(part.view).front, `${part.name} 必须有视图定义`);
+  }
+  const cube = { id: 'cube', at: [0, 0, 0] };
+  const cylinder = { id: 'cylinder', at: [0, 1, 0] };
+  assert.equal(partsOverlap(cube, cylinder), false, '包围盒正好相接（方块顶 y=1、圆柱底 y=1）不算相交');
+
+  // 方块 (0,0,0) 与圆柱 (0,1,0)：方块顶面 y=1，圆柱从 y=1 起 ⇒ 不相交
+  const touching = { id: 'cylinder', at: [0, 1, 0] };
+  assert.equal(partsOverlap({ id: 'cube', at: [0, 0, 0] }, touching), false, '相邻不算相交');
+  assert.equal(partsOverlap({ id: 'cube', at: [0, 0, 0] }, { id: 'cube', at: [0, 0, 0] }), true, '同一位置必然相交');
+  assert.equal(partsOverlap({ id: 'cylinder', at: [0, 0, 0] }, { id: 'cube', at: [1, 0, 1] }), true, '圆柱占据 2×2 底面');
+
+  assert.equal(canPlacePart([{ id: 'cube', at: [0, 0, 0] }], { id: 'cube', at: [1, 0, 0] }), true);
+  assert.equal(canPlacePart([{ id: 'cube', at: [0, 0, 0] }], { id: 'cube', at: [0, 0, 0] }), false, '重叠不放');
+  assert.equal(canPlacePart([], { id: 'cube', at: [MAX_SIZE, 0, 0] }), false, '越界不放');
+  assert.equal(canPlacePart([], { id: 'cylinder', at: [MAX_SIZE - 1, 0, 0] }), false, '圆柱 2 格宽，贴边也越界');
+
+  assert.deepEqual(partsExtent([{ id: 'cube', at: [0, 0, 0] }, { id: 'cylinder', at: [0, 1, 0] }]),
+    { width: 2, height: 3, depth: 2 });
+});
+
+test('组合体视图：部件按位置摆进三视图（方块在下、圆柱在上）', () => {
+  const parts = [{ id: 'cube', at: [0, 0, 0] }, { id: 'cylinder', at: [0, 1, 0] }];
+  const views = compositeViews(parts);
+  assert.deepEqual([views.front.cols, views.front.rows], [2, 3], '主视图：宽 2 格、高 3 格');
+  assert.deepEqual([views.top.cols, views.top.rows], [2, 2], '俯视图：2×2');
+  assert.deepEqual([views.left.cols, views.left.rows], [2, 3], '左视图：2×3');
+  // 方块的正面是 1×1 的矩形，圆心在 (0.5, 3−0.5)；圆柱的正面是 2×2 的矩形，中心 (1, 3−1−1)
+  assert.deepEqual(views.front.shapes.map((s) => s.center), [[0.5, 2.5], [1, 1]]);
+  assert.equal(views.front.shapes[1].shape.kind, 'rect');
+  assert.equal(views.front.shapes[1].shape.width, 2);
+  // 俯视图里圆柱是圆，方块是 1×1 的矩形
+  assert.deepEqual(views.top.shapes.map((s) => s.center), [[0.5, 0.5], [1, 1]]);
+  assert.equal(views.top.shapes[1].shape.kind, 'circle');
+  // 左视图：列 = z（右 = 前），圆柱的 2×2 矩形在 z 中间
+  assert.equal(views.left.shapes[1].shape.kind, 'rect');
+});
+
+test('组合体渲染：三视图与立体场景都能画出来', () => {
+  withStubDocument(() => {
+    const parts = [{ id: 'cube', at: [0, 0, 0] }, { id: 'cylinder', at: [0, 1, 0] }];
+    const views = compositeViews(parts);
+    const svg = renderCompositeView(views.front, { cell: 30 });
+    assert.equal(svg.tagName, 'svg');
+    assert.equal(svg.children.length, 2, '主视图里应有方块与圆柱两个形状');
+    assert.match(svg.getAttribute('aria-label'), /2 个部件/);
+
+    const scene = renderCompositeScene(parts, { yaw: DEFAULT_VIEW.yaw, pitch: DEFAULT_VIEW.pitch });
+    assert.equal(byClass(scene, 'builder-ground').length, MAX_SIZE * MAX_SIZE, '地面网格仍然在');
+    const faces = byClass(scene, 'builder-face');
+    assert.ok(faces.length > 0, '部件应有可见面');
+    assert.deepEqual([...new Set(faces.map((f) => f.getAttribute('data-part')))].sort(), ['0', '1'],
+      '每个面都要挂上它属于哪个部件（点击叠放靠它）');
+  });
+});
+
+test('组合体模式：部件库出现，加删方块控件隐藏，撤销清空保留', () => {
+  withStubDocument(() => {
+    const { container, handle } = mountBuilder([[0, 0, 0]]);
+    handle.setSource('parts');
+    assert.equal(handle.source, 'parts');
+    assert.equal(byClass(container, 'builder-palette')[0].hidden, false, '部件库应显示');
+    assert.equal(byClass(container, 'builder-part').length, PART_CATALOG.length);
+    assert.equal(byClass(container, 'builder-gallery')[0].hidden, true, '几何体库应隐藏（那是单立体模式）');
+    assert.equal(byClass(container, 'builder-modes')[0].hidden, true);
+    assert.equal(byClass(container, 'builder-actions')[0].hidden, false, '撤销 / 清空对组合体有意义');
+    assert.match(byClass(container, 'builder-status')[0].textContent, /点地面/, '空组合体应提示怎么开始');
+  });
+});
+
+test('组合体模式：点地面放部件、点部件叠在上面（x/z 自动对齐）', () => {
+  withStubDocument(() => {
+    const { container, handle, click } = mountBuilder([[0, 0, 0]]);
+    handle.setSource('parts');
+    const ground = byClass(container, 'builder-ground').find((g) => g.getAttribute('data-ground') === '0,0');
+    click(ground);
+    assert.deepEqual(handle.getParts(), [{ id: 'cube', at: [0, 0, 0] }], '默认放一个小方块在地面');
+
+    // 选圆柱，再点方块的顶面 → 叠在方块正上方
+    handle.setPart('cylinder');
+    const cubeFace = byClass(container, 'builder-face')[0];
+    click(cubeFace);
+    assert.deepEqual(handle.getParts(), [
+      { id: 'cube', at: [0, 0, 0] },
+      { id: 'cylinder', at: [0, 1, 0] }
+    ], '点部件应把它叠在正上方');
+
+    // 组合体的三个视图应是「组合」出来的（方格模式不会有）
+    const strip = byClass(container, 'builder-strip')[0];
+    assert.ok(byClass(strip, 'figure-view-shape').length >= 6,
+      '三个视图里应有多个部件的形状（方块 1 + 圆柱 1 每视图各 2 个）');
+    assert.match(byClass(container, 'builder-status')[0].textContent, /小方块×1、圆柱×1/);
+  });
+});
+
+test('组合体模式：相交 / 越界的位置放不进去', () => {
+  withStubDocument(() => {
+    const { container, handle, click } = mountBuilder([[0, 0, 0]]);
+    handle.setSource('parts');
+    const ground = byClass(container, 'builder-ground').find((g) => g.getAttribute('data-ground') === '0,0');
+    click(ground);
+    click(ground); // 同一格再放一次 → 相交，应被拒绝
+    assert.equal(handle.getParts().length, 1, '重叠位置不得放入');
+    assert.equal(handle.placePart('cylinder', [MAX_SIZE - 1, 0, 0]), false, '越界位置不得放入');
+    assert.equal(handle.placePart('cylinder', [1, 0, 0]), true, '空位可以放');
+  });
+});
+
+test('组合体模式：转动观察方向，三个视图仍然不变', () => {
+  withStubDocument(() => {
+    const { container, handle, canvas } = mountBuilder([[0, 0, 0]]);
+    handle.setSource('parts');
+    handle.placePart('cube', [0, 0, 0]);
+    handle.placePart('cylinder', [0, 1, 0]);
+    const signature = () => byClass(byClass(container, 'builder-strip')[0], 'figure-view-shape')
+      .map((n) => `${n.tagName}:${n.attributes.r ?? n.attributes.d ?? n.attributes.width ?? ''}`).join('|');
+    const before = signature();
+    assert.ok(before.length > 0, '组合体视图应有内容');
+    canvas.dispatch('pointerdown', { target: canvas, clientX: 30, clientY: 30, pointerId: 1, button: 0, preventDefault() {} });
+    canvas.dispatch('pointermove', { target: canvas, clientX: 170, clientY: 80, pointerId: 1 });
+    canvas.dispatch('pointerup', { target: canvas, clientX: 170, clientY: 80, pointerId: 1, preventDefault() {} });
+    assert.equal(signature(), before, '组合体模式下旋转同样不能改变三个视图');
+  });
+});
+
+test('组合体模式：清空与撤销', () => {
+  withStubDocument(() => {
+    const { container, handle } = mountBuilder([[0, 0, 0]]);
+    handle.setSource('parts');
+    handle.placePart('cube', [0, 0, 0]);
+    handle.placePart('cylinder', [0, 1, 0]);
+    assert.equal(handle.getParts().length, 2);
+    const [undo, reset] = byClass(container, 'builder-action');
+    reset.dispatch('click');
+    assert.equal(handle.getParts().length, 0, '清空应只清组合体');
+    undo.dispatch('click');
+    assert.equal(handle.getParts().length, 2, '撤销应恢复组合体');
+    assert.equal(handle.getCubes().length, 1, '清空 / 撤销不影响方块模式的数据');
   });
 });
 

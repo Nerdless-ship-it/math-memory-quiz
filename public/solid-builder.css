@@ -32,7 +32,8 @@
 .builder-sources { display: flex; gap: 6px; }
 
 .builder-source,
-.builder-shape {
+.builder-shape,
+.builder-part {
   min-height: 30px;
   padding: 0 10px;
   border: 1px solid var(--line, #dce3df);
@@ -46,10 +47,12 @@
 }
 
 .builder-source:hover,
-.builder-shape:hover { border-color: #a9b7b1; background: var(--soft, #f2f5f3); }
+.builder-shape:hover,
+.builder-part:hover { border-color: #a9b7b1; background: var(--soft, #f2f5f3); }
 
 .builder-source[aria-pressed='true'],
-.builder-shape[aria-pressed='true'] {
+.builder-shape[aria-pressed='true'],
+.builder-part[aria-pressed='true'] {
   border-color: var(--green, #126b52);
   color: white;
   background: var(--green, #126b52);
@@ -65,8 +68,16 @@
 /* ⚠️ hidden 属性只带 UA 样式的 display:none，而上面这些容器都声明了 display:flex
  * ——作者样式优先级更高，会把 hidden 顶掉。所以必须显式补 [hidden] 规则。 */
 .builder-gallery[hidden],
+.builder-palette[hidden],
 .builder-modes[hidden],
 .builder-actions[hidden] { display: none; }
+
+/* 部件库（组合体模式）：方块 + 标准几何体，点一个再点画布放置 */
+.builder-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
 
 .builder-tab,
 .builder-mode,
