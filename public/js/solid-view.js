@@ -1,4 +1,4 @@
-// SDF 立体的渲染层：画立体实体 + 在该立体上画出切面轮廓。
+﻿// SDF 立体的渲染层：画立体实体 + 在该立体上画出切面轮廓。
 //
 // 与 figure.js 的分工：figure.js 画「已知解析形状」的静态图（立方体/展开图/截面形状），
 // 讲究精确；本文件服务**任意组合**的立体（SDF 表达），靠光线步进求面。
@@ -78,6 +78,7 @@ function extentFor(width, pxPerUnit) {
   return (width / 2) / pxPerUnit + 0.6;
 }
 
+
 /**
  * 预计算立体表面：把每个屏幕采样点对应的世界坐标与法向缓存下来。
  *
@@ -146,7 +147,18 @@ export function cacheSurface(solid, options = {}) {
         }));
       }
 
-      // ── 第二层：切面轮廓（精确椭圆/多边形，被自身遮住的部分画虚线）──
+      // ── 第二层：切面交线 ──
+      //
+      // 这一层我试了四版，都是被「立体图形怎么看着很奇怪」逼出来的：
+      //   1. 只把贴近切面的**可见**表面点染色 ⇒ 曲面体上那些点连成弧线，像贴纸。
+      //   2. 对这些可见点求凸包 ⇒ 得到月牙，会让人误以为截面是月牙形。
+      //   3. 画解析求出的完整交线 ⇒ 前後两半在斜二测下重叠成一圈实线，仍别扭。
+      //   4. 把切口填成一块面（可见段 ∪ 沿轮廓闭合）⇒ 填出来是一条**带子**而不是一块面，
+      //      因为闭合路径必须沿立体轮廓绕，那段绕行在斜二测下会横穿立体。
+      //
+      // 最终退回**描线**：可见段实线、被遮段虚线。这个表达虽然朴素，但不会产生错觉
+      // ——第 4 版那种「看上去像有一块面的错觉」比朴素更糟。
+      // 要真正做出「露出的切口」，得换成真 3D 透视相机 + 深度裁剪，那是另一个渲染器。
       if (showCut) {
         const section = sectionLoops(solid, nHat, d, {
           extent: extentFor(width, pxPerUnit),
@@ -155,7 +167,6 @@ export function cacheSurface(solid, options = {}) {
         const loops = section.ok ? [...section.outer, ...section.holes] : [];
         const visibleSegments = [];
         const hiddenSegments = [];
-
         for (const loop of loops) {
           if (loop.length < 3) continue;
           const closed = [...loop, loop[0]];
@@ -165,11 +176,9 @@ export function cacheSurface(solid, options = {}) {
             const q = project3d(world);
             const screen = { x: cx + q.x * pxPerUnit, y: cy + q.y * pxPerUnit };
             if (prev) {
-              // 取线段中点判定可见性：端点正好落在立体表面上，探针会被判成内部，
-              // 用端点会导致整圈都被标成虚线。
+              // 探针取线段**中点**：端点正好落在立体表面上，用端点会把整圈判成被遮
               const midWorld = mul(add(prev.world, world), 0.5);
-              const probe = add(midWorld, mul(toCamera, 0.015));
-              const hidden = sdf(probe) < 0;
+              const hidden = sdf(add(midWorld, mul(toCamera, 0.015))) < 0;
               const segment = `M${prev.screen.x.toFixed(2)},${prev.screen.y.toFixed(2)}`
                 + `L${screen.x.toFixed(2)},${screen.y.toFixed(2)}`;
               (hidden ? hiddenSegments : visibleSegments).push(segment);
@@ -178,8 +187,7 @@ export function cacheSurface(solid, options = {}) {
           }
         }
 
-        // 顺序很重要：**先画被遮的虚线，再画可见的实线**。
-        // 反过来会让虚线叠在实线上，把可见的那半也打成虚线，看起来整圈都是虚的。
+        // 先画虚线再画实线，否则虚线会盖在实线上把可见那半也打成虚的
         if (hiddenSegments.length) {
           children.push(svgElement('path', {
             d: hiddenSegments.join(' '), class: 'solid-cut-hidden', 'aria-hidden': 'true'
