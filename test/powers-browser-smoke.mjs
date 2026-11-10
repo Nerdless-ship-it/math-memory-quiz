@@ -96,7 +96,7 @@ try {
   await evaluate(`(() => {
     localStorage.setItem('math-memory-quiz-history:v1', JSON.stringify([{
       id: 'previous-powers', quizType: 'powers', completedAt: Date.now() - 86400000,
-      accuracy: 83, correct: 20, total: 24, durationMs: 110000
+      accuracy: 83, correct: 20, total: POWER_PAIRS.length, durationMs: 110000
     }]));
     location.reload();
   })()`);
@@ -152,8 +152,8 @@ try {
     comparison: document.querySelector('#comparison-label').textContent,
     savedRecords: JSON.parse(localStorage.getItem('math-memory-quiz-history:v1')).filter(record => record.quizType === 'powers').length
   })`));
-  assert(result.accuracy === '96%', `Expected 96%, received ${result.accuracy}`);
-  assert(result.correct === '23 / 24', `Expected 23 / 24, received ${result.correct}`);
+  assert(result.accuracy === '98%', `Expected 98%, received ${result.accuracy}`);
+  assert(result.correct === '43 / 44', `Expected 43 / 44, received ${result.correct}`);
   assert(result.corrections === 1, `Expected one correction, received ${result.corrections}`);
   assert(result.heading.includes('1 题'), `Unexpected heading: ${result.heading}`);
   assert(result.comparison === '对比上一次', `Unexpected comparison label: ${result.comparison}`);

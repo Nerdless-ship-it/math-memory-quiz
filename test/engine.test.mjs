@@ -224,8 +224,8 @@ test('createQuiz：奇数题量时下半取多，且多轮随机下依然均衡'
 
   for (let round = 0; round < 20; round += 1) {
     const questions = createQuiz(POWER_PAIRS, Math.random);
-    assert.equal(questions.filter((question) => question.direction === 'forward').length, 12);
-    assert.equal(questions.filter((question) => question.direction === 'backward').length, 12);
+    assert.equal(questions.filter((question) => question.direction === 'forward').length, 22);
+    assert.equal(questions.filter((question) => question.direction === 'backward').length, 22);
   }
 });
 
@@ -387,8 +387,8 @@ test('percent 适配器：订正文本与错题 id 保持 v1 形状', () => {
 // ── powers 适配器 ─────────────────────────────────────────────────────
 test('powers 适配器：条目映射与契约 3.4 一致', () => {
   const items = powersAdapter.items();
-  assert.equal(items.length, 24);
-  assert.equal(new Set(items.map((item) => item.id)).size, 24);
+  assert.equal(items.length, 44);
+  assert.equal(new Set(items.map((item) => item.id)).size, 44);
   const square = items.find((item) => item.id === 'square-17');
   assert.equal(square.front, '17²');
   assert.equal(square.back, '289');
@@ -492,7 +492,7 @@ test('powers 适配器：订正等式与错题 id 保持 v1 形状', () => {
     question: '2.2 ≈ ?³',
     answer: '1.3'
   });
-  assert.equal(powersAdapter.perfectMessage().title, '24 组平方与幂次全部正确');
+  assert.equal(powersAdapter.perfectMessage().title, '44 组平方与幂次全部正确');
 });
 
 test('两个适配器都是纯函数：源码不引用 document / localStorage / window', async () => {

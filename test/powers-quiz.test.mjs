@@ -9,19 +9,23 @@ import {
   powerExpression
 } from '../public/js/powers-quiz.js';
 
-test('幂次题库包含图片中的 24 对且标识不重复', () => {
-  assert.equal(POWER_PAIRS.length, 24);
-  assert.equal(new Set(POWER_PAIRS.map(({ id }) => id)).size, 24);
-  assert.equal(POWER_PAIRS.filter(({ exponent }) => exponent === 2).length, 18);
-  assert.equal(POWER_PAIRS.filter(({ exponent }) => exponent === 3).length, 3);
+test('幂次题库包含 1~10 的平方与立方及既有幂值，标识不重复', () => {
+  assert.equal(POWER_PAIRS.length, 44);
+  assert.equal(new Set(POWER_PAIRS.map(({ id }) => id)).size, 44);
+  assert.equal(POWER_PAIRS.filter(({ exponent }) => exponent === 2).length, 28);
+  assert.equal(POWER_PAIRS.filter(({ exponent }) => exponent === 3).length, 13);
   assert.equal(POWER_PAIRS.filter(({ exponent }) => exponent === 4).length, 3);
+  for (let base = 1; base <= 10; base += 1) {
+    assert.equal(POWER_PAIRS.find(({ id }) => id === `square-${base}`)?.result, String(base ** 2));
+    assert.equal(POWER_PAIRS.find(({ id }) => id === `cube-${base}`)?.result, String(base ** 3));
+  }
 });
 
-test('每轮完整覆盖 24 对并均衡两种方向', () => {
+test('每轮完整覆盖 44 对并均衡两种方向', () => {
   const quiz = createPowerQuiz(POWER_PAIRS, () => 0.42);
-  assert.equal(new Set(quiz.map(({ id }) => id)).size, 24);
-  assert.equal(quiz.filter(({ direction }) => direction === 'base-to-result').length, 12);
-  assert.equal(quiz.filter(({ direction }) => direction === 'result-to-base').length, 12);
+  assert.equal(new Set(quiz.map(({ id }) => id)).size, 44);
+  assert.equal(quiz.filter(({ direction }) => direction === 'base-to-result').length, 22);
+  assert.equal(quiz.filter(({ direction }) => direction === 'result-to-base').length, 22);
 });
 
 test('平方、立方和四次幂数据与图片一致', () => {

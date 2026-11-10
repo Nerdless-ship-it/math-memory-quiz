@@ -49,6 +49,8 @@ export const SUBJECTS = Object.freeze([
     questionTypes: ['fill'],
     adapter: 'powers',
     tags: ['速算'],
+    allowDuplicateBack: true,
+    uniqueBy: 'front',
     updatedAt: null,
     legacyClass: 'test-choice powers-choice',
     legacyId: 'powers-choice'

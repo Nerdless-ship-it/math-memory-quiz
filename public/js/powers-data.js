@@ -1,4 +1,24 @@
 export const POWER_PAIRS = Object.freeze([
+  ...Array.from({ length: 10 }, (_, index) => index + 1).flatMap((base) => ([
+    {
+      id: `square-${base}`,
+      base: String(base),
+      exponent: 2,
+      result: String(base ** 2),
+      acceptedResults: [String(base ** 2)],
+      topic: '平方数',
+      approximate: false
+    },
+    {
+      id: `cube-${base}`,
+      base: String(base),
+      exponent: 3,
+      result: String(base ** 3),
+      acceptedResults: [String(base ** 3)],
+      topic: '立方数',
+      approximate: false
+    }
+  ])),
   ...[
     [11, 121], [12, 144], [13, 169], [14, 196], [15, 225], [16, 256],
     [17, 289], [18, 324], [19, 361], [21, 441], [22, 484], [23, 529],

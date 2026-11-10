@@ -120,6 +120,6 @@ export default {
 
   /** 满分文案。 */
   perfectMessage() {
-    return { title: '24 组平方与幂次全部正确', note: '保持这个速度，再测一次巩固记忆。' };
+    return { title: `${POWER_PAIRS.length} 组平方与幂次全部正确`, note: '保持这个速度，再测一次巩固记忆。' };
   }
 };
